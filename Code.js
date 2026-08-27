@@ -1,4 +1,5 @@
 const SPREADSHEET_ID = "148j3X9VwT3tJbba-0WBDeow72DrWYWdKPq4VxtNff28";
+const KR_SPREADSHEET_ID = "16BKIgn-uU8_scBp0t55qx4CYI-Zk3dhJOjkTUdgg90Q";
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.api) {
@@ -166,6 +167,55 @@ function getPlatformData(selectedMonth) {
     .from(availableMonthSet)
     .sort((a, b) => parseInt(a) - parseInt(b));
 
+  // 프론트엔드(squirrelfish)의 JP Executive / Total 페이지가 기대하는
+  // 12개월 배열/일별 시리즈 형태로 재가공한 필드들 (기존 필드는 그대로 유지)
+  const monthlySales = new Array(12).fill(0);
+  const monthlyOrders = new Array(12).fill(0);
+
+  Object.keys(monthlySummary).forEach(label => {
+    const idx = parseInt(label, 10) - 1;
+    if (idx >= 0 && idx < 12) {
+      monthlySales[idx] = monthlySummary[label].revenue;
+      monthlyOrders[idx] = monthlySummary[label].orders;
+    }
+  });
+
+  const dailyByMonth = {};
+
+  Object.keys(dailySales).forEach(label => {
+    const idx = parseInt(label, 10);
+    if (idx >= 1 && idx <= 12) {
+      dailyByMonth[String(idx)] = {
+        labels: dailySales[label].dates,
+        datasets: [{ label: "JP daily sales", data: dailySales[label].revenue }]
+      };
+    }
+  });
+
+  const sumArray_ = arr => (arr || []).reduce((sum, v) => sum + Number(v || 0), 0);
+  const funnelByMonth = new Array(12).fill(null).map(() => ({}));
+
+  Object.keys(dailyFunnel).forEach(label => {
+    const idx = parseInt(label, 10);
+    if (idx < 1 || idx > 12) return;
+
+    const bucket = dailyFunnel[label];
+    const validRates = (bucket.conversionRate || []).filter(v => v != null);
+    const avgRate = validRates.length
+      ? sumArray_(validRates) / validRates.length
+      : 0;
+
+    funnelByMonth[idx - 1] = {
+      유입자수: sumArray_(bucket.visitors),
+      장바구니: sumArray_(bucket.carts),
+      주문완료: sumArray_(bucket.completedOrders),
+      주문전환율: Math.round(avgRate * 100) / 100
+    };
+  });
+
+  const targets = new Array(12).fill(0);
+  targets[month - 1] = kpi.target;
+
   return {
     kpi: kpi,
     dailySales: dailySales,
@@ -175,6 +225,11 @@ function getPlatformData(selectedMonth) {
     productTotals: productTotals,
     promotion: promotion,
     availableMonths: availableMonths,
+    monthlySales: monthlySales,
+    orders: monthlyOrders,
+    dailyByMonth: dailyByMonth,
+    funnel: funnelByMonth,
+    targets: targets,
     generatedAt: Utilities.formatDate(
       new Date(),
       "Asia/Seoul",
@@ -493,6 +548,27 @@ function getTotalBusinessData(month) {
     };
   });
 
+  // squirrelfish 프론트엔드(Total 페이지)가 기대하는 KR+JP 통합 월별 배열.
+  // JP는 이 스프레드시트(손익계산서)의 "Qoo10 매출" 12개월 값을 그대로 쓰고
+  // (가장 최신/정확한 값), KR은 별도의 KR 사업 스프레드시트("월마감" 시트)에서
+  // 가져온 뒤, KR 시트에 함께 기록된 엔화→원화 환율로 JP 값을 환산합니다.
+  const jpRevenueItem = findItem("Qoo10 매출") || findItem("총매출");
+  const monthlyJpJpy = jpRevenueItem ? jpRevenueItem.months.slice() : new Array(12).fill(0);
+
+  const krClose = getKrMonthlyClose_();
+  const exchangeRates = {};
+  let lastKnownRate = 0;
+
+  for (let m = 1; m <= 12; m++) {
+    const rate = krClose.impliedRate[m - 1];
+    if (rate) lastKnownRate = rate;
+    exchangeRates[String(m)] = rate || lastKnownRate;
+  }
+
+  const monthlyJpKrw = monthlyJpJpy.map((jpy, idx) =>
+    Math.round(jpy * (exchangeRates[String(idx + 1)] || 0))
+  );
+
   return {
     month: month,
     monthLabel: month + "월",
@@ -500,6 +576,12 @@ function getTotalBusinessData(month) {
     reportingPeriod: reportingPeriod,
     lineItems: lineItems,
     summary: summary,
+    monthlyKr: krClose.monthlyKr,
+    monthlyJpJpy: monthlyJpJpy,
+    monthlyJpKrw: monthlyJpKrw,
+    exchangeRates: exchangeRates,
+    krTargets: krClose.krTargets,
+    targets: krClose.krTargets,
     generatedAt: Utilities.formatDate(
       new Date(),
       "Asia/Seoul",
@@ -509,63 +591,135 @@ function getTotalBusinessData(month) {
 }
 
 /**
- * "상품별 매출" 시트의 SKU별 카탈로그(라인/코드/브랜드/단위)와
- * 선택 월/누적 판매수량을 반환합니다.
+ * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
+ * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
+ * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있고
+ * (예: 8월 이후는 0/공백), 이는 실제 데이터 상태이므로 그대로 반환합니다.
+ */
+function getKrMonthlyClose_() {
+  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "월마감");
+
+  const section1 = sheet.getRange(5, 26, 12, 10).getDisplayValues();
+  const targetColumn = sheet.getRange(23, 35, 12, 1).getDisplayValues();
+
+  const monthlyKr = [];
+  const impliedRate = [];
+  const krTargets = [];
+
+  for (let i = 0; i < 12; i++) {
+    const row = section1[i] || [];
+    const domestic = toNumber_(row[0]); // col26: 매출 합계_배송비 포함 (국내)
+    const jpJpy = toNumber_(row[4]); // col30: 큐텐 매출액(엔화)
+    const jpKrw = toNumber_(row[5]); // col31: 큐텐 매출액(KRW)
+
+    monthlyKr.push(domestic);
+    impliedRate.push(jpJpy ? jpKrw / jpJpy : 0);
+    krTargets.push(toNumber_((targetColumn[i] || [])[0]));
+  }
+
+  return {
+    monthlyKr: monthlyKr,
+    impliedRate: impliedRate,
+    krTargets: krTargets
+  };
+}
+
+/**
+ * KR 사업 스프레드시트의 "피봇)라인별매출" 시트(제품 라인별 월 판매수량/매출,
+ * 1~7월까지 실적 반영)를 읽어옵니다. krProduct/krProductSales 공용 로직입니다.
+ */
+function getKrLineProductRows_() {
+  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "피봇)라인별매출");
+
+  const raw = sheet.getRange(3, 1, 18, 17).getDisplayValues();
+
+  return raw
+    .filter(row => row[0])
+    .map(row => {
+      const monthly = [];
+
+      for (let m = 1; m <= 12; m++) {
+        if (m <= 7) {
+          const qtyIdx = 1 + (m - 1) * 2;
+          const revIdx = 2 + (m - 1) * 2;
+          monthly.push({
+            quantity: toNumber_(row[qtyIdx]),
+            revenue: toNumber_(row[revIdx])
+          });
+        } else {
+          monthly.push({ quantity: 0, revenue: 0 });
+        }
+      }
+
+      return {
+        name: String(row[0]).trim(),
+        monthly: monthly,
+        totalQuantity: toNumber_(row[15]),
+        totalRevenue: toNumber_(row[16])
+      };
+    });
+}
+
+/**
+ * KR 제품 라인 카탈로그: 월별 판매량 랭킹(monthly) + 누적 랭킹(cumulative) +
+ * 상위 라인의 12개월 추이(trends)를 반환합니다.
  * (serveDashboardApi_ 의 api=krProduct 분기에서 사용)
  */
 function getKoreaProductData(month) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = requireSheet_(ss, "상품별 매출");
+  const lines = getKrLineProductRows_();
 
-  const meta = getProductDailyMeta_(sheet);
+  const monthly = {};
 
-  if (!meta.rowCount || !meta.dateCount) {
-    return { month: month, monthLabel: month + "월", products: [] };
+  for (let m = 1; m <= 12; m++) {
+    monthly[String(m)] = lines
+      .map(line => ({ name: line.name, quantity: line.monthly[m - 1].quantity }))
+      .filter(item => item.quantity > 0)
+      .sort((a, b) => b.quantity - a.quantity);
   }
 
-  const monthKey = String(month).padStart(2, "0");
-  const monthFlags = meta.dates.map(ymd => ymd.slice(5, 7) === monthKey);
+  const cumulative = lines
+    .map(line => ({ name: line.name, quantity: line.totalQuantity }))
+    .filter(item => item.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity);
 
-  const infoValues = sheet
-    .getRange(6, 2, meta.rowCount, 4)
-    .getDisplayValues(); // B:라인, C:품목명, D:품목코드, E:브랜드명
+  const topNames = cumulative.slice(0, 8).map(item => item.name);
+  const trends = {
+    labels: Array.from({ length: 12 }, (_, i) => (i + 1) + "월"),
+    datasets: topNames.map(name => {
+      const line = lines.find(l => l.name === name);
+      return {
+        label: name,
+        data: line ? line.monthly.map(x => x.quantity) : new Array(12).fill(0)
+      };
+    })
+  };
 
-  const unitValues = sheet
-    .getRange(6, 6, meta.rowCount, 1)
-    .getDisplayValues(); // F:단위
+  return {
+    month: month,
+    monthLabel: month + "월",
+    trends: trends,
+    monthly: monthly,
+    cumulative: cumulative
+  };
+}
 
-  const qtyValues = sheet
-    .getRange(6, 7, meta.rowCount, meta.dateCount)
-    .getValues();
+/**
+ * KR 제품 라인별 월간 판매량(모든 라인, 월별 랭킹)을 반환합니다.
+ * (serveDashboardApi_ 의 api=krProductSales 분기에서 사용)
+ */
+function getKoreaProductSalesData(month) {
+  const lines = getKrLineProductRows_();
 
-  const products = [];
+  const products = {};
 
-  for (let i = 0; i < meta.rowCount; i++) {
-    const name = String(infoValues[i][1] || "").trim();
-
-    if (!name || isAggregateRowLabel_(name)) continue;
-
-    let monthQty = 0;
-    let totalQty = 0;
-
-    for (let c = 0; c < meta.dateCount; c++) {
-      const value = Number(qtyValues[i][c] || 0);
-      totalQty += value;
-      if (monthFlags[c]) monthQty += value;
-    }
-
-    products.push({
-      line: String(infoValues[i][0] || "").trim(),
-      name: name,
-      code: String(infoValues[i][2] || "").trim(),
-      brand: String(infoValues[i][3] || "").trim(),
-      unit: String(unitValues[i][0] || "").trim(),
-      monthQty: monthQty,
-      totalQty: totalQty
-    });
+  for (let m = 1; m <= 12; m++) {
+    products[String(m)] = lines
+      .map(line => ({ name: line.name, quantity: line.monthly[m - 1].quantity }))
+      .filter(item => item.quantity > 0)
+      .sort((a, b) => b.quantity - a.quantity);
   }
-
-  products.sort((a, b) => b.monthQty - a.monthQty);
 
   return {
     month: month,
@@ -575,121 +729,51 @@ function getKoreaProductData(month) {
 }
 
 /**
- * "상품별 매출" 시트에서 선택한 월의 일별 판매량(TOP8 상품)을 반환합니다.
- * (serveDashboardApi_ 의 api=krProductSales 분기에서 사용)
+ * KR 사업 스프레드시트의 자사몰(cafe24) 방문 트래픽/구매 전환 지표에서
+ * 2026년 월별 유입/주문/전환율을 반환합니다. 자사몰 데이터는 2026년 4월까지만
+ * 갱신되어 있어(이후 달은 값이 비어있음), 그 상태를 그대로 반영합니다.
+ * 다른 국내 채널(네이버/29CM/카카오 등)의 유입 데이터는 이 시트에 없습니다.
+ * (serveDashboardApi_ 의 api=krFunnel 분기에서 사용)
  */
-function getKoreaProductSalesData(month) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = requireSheet_(ss, "상품별 매출");
+function getKoreaFunnelData(month) {
+  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "월마감");
 
-  const monthKey = String(month).padStart(2, "0");
-  const daysInMonth = new Date(2026, month, 0).getDate();
-  const start = "2026-" + monthKey + "-01";
-  const end = "2026-" + monthKey + "-" + String(daysInMonth).padStart(2, "0");
+  const raw = sheet.getRange(72, 1, 39, 10).getDisplayValues();
 
-  const series = buildProductDailySeries_(sheet, "__ALL__", start, end);
+  const funnelByMonth = {};
+  const ordersByMonth = new Array(12).fill(0);
+
+  raw.forEach(row => {
+    const label = String(row[0] || "");
+    const match = label.match(/^(\d{4})-(\d{2})-01/);
+
+    if (!match || match[1] !== "2026") return;
+
+    const m = Number(match[2]);
+    const visitors = toNumber_(row[1]); // 전체방문
+    const orders = toNumber_(row[5]); // 구매건수
+    const conversionRate = parseFloat(String(row[8] || "").replace("%", "")) || 0;
+
+    funnelByMonth[m] = {
+      유입자수: visitors,
+      "국내 주문": orders,
+      주문전환율: conversionRate
+    };
+    ordersByMonth[m - 1] = orders;
+  });
+
+  const funnel = [];
+
+  for (let m = 1; m <= 12; m++) {
+    funnel.push(funnelByMonth[m] || {});
+  }
 
   return {
     month: month,
     monthLabel: month + "월",
-    labels: series.labels,
-    datasets: series.datasets,
-    summary: series.summary
-  };
-}
-
-/**
- * "전환지표" 시트의 채널별 유입(PV) 상세 + 퍼널(유입/장바구니/주문완료/전환율)을
- * 선택한 월 기준으로 반환합니다.
- * (serveDashboardApi_ 의 api=krFunnel 분기에서 사용)
- */
-function getKoreaFunnelData(month) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = requireSheet_(ss, "전환지표");
-
-  const lastRow = sheet.getLastRow();
-  const lastCol = sheet.getLastColumn();
-  const monthLabel = month + "월";
-
-  if (lastRow < 2 || lastCol < 58) {
-    return {
-      month: month,
-      monthLabel: monthLabel,
-      dates: [],
-      channels: [],
-      channelTotals: [],
-      funnel: { visitors: [], carts: [], completedOrders: [], conversionRate: [] },
-      summary: { totalVisitors: 0, totalCarts: 0, totalCompletedOrders: 0, avgConversionRate: 0 }
-    };
-  }
-
-  const headerRow = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
-  const channelHeaders = headerRow.slice(2, 54); // C~BB: 유입채널(PV) 상세 52종
-
-  const rows = sheet
-    .getRange(2, 1, lastRow - 1, lastCol)
-    .getDisplayValues();
-
-  const dates = [];
-  const channelSeries = channelHeaders.map(() => []);
-  const visitors = [];
-  const carts = [];
-  const completedOrders = [];
-  const conversionRate = [];
-
-  rows.forEach(row => {
-    const date = row[0];
-    const rowMonth = row[1];
-
-    if (!date || rowMonth !== monthLabel) return;
-
-    dates.push(normalizeDate_(date));
-
-    channelHeaders.forEach((_, index) => {
-      channelSeries[index].push(nullableNumber_(row[2 + index]));
-    });
-
-    visitors.push(nullableNumber_(row[54]));
-    carts.push(nullableNumber_(row[55]));
-    completedOrders.push(nullableNumber_(row[56]));
-    conversionRate.push(nullableNumber_(row[57]));
-  });
-
-  const channelTotals = channelHeaders
-    .map((name, index) => ({
-      name: name,
-      total: channelSeries[index].reduce((sum, v) => sum + Number(v || 0), 0)
-    }))
-    .filter(item => item.total > 0)
-    .sort((a, b) => b.total - a.total);
-
-  const sum = arr => arr.reduce((total, v) => total + Number(v || 0), 0);
-  const validConversionRates = conversionRate.filter(v => v != null);
-  const avgConversionRate = validConversionRates.length
-    ? sum(validConversionRates) / validConversionRates.length
-    : 0;
-
-  return {
-    month: month,
-    monthLabel: monthLabel,
-    dates: dates,
-    channels: channelHeaders.map((name, index) => ({
-      name: name,
-      values: channelSeries[index]
-    })),
-    channelTotals: channelTotals,
-    funnel: {
-      visitors: visitors,
-      carts: carts,
-      completedOrders: completedOrders,
-      conversionRate: conversionRate
-    },
-    summary: {
-      totalVisitors: sum(visitors),
-      totalCarts: sum(carts),
-      totalCompletedOrders: sum(completedOrders),
-      avgConversionRate: Math.round(avgConversionRate * 100) / 100
-    }
+    orders: ordersByMonth,
+    funnel: funnel
   };
 }
 
