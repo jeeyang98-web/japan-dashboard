@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JP Business Platform</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f6f5fa;
+      --panel:#ffffff;
+      --ink:#1c1722;
+      --muted:#7d7488;
+      --line:#eae6ef;
+      --purple:#7c3aed;
+      --purple2:#a855f7;
+      --lav:#ede9fe;
+      --dark:#191220;
+      --green:#16a34a;
+      --orange:#f59e0b;
+      --red:#ef4444;
+      --shadow:0 12px 35px rgba(54,34,77,.08);
+    }
+
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:Inter,Pretendard,"Noto Sans KR",Arial,sans-serif;
+    }
+
+    button,select,input{font:inherit}
+
+    .app{
+      display:grid;
+      grid-template-columns:240px minmax(0,1fr);
+      min-height:100vh;
+    }
+
+    .sidebar{
+      background:var(--dark);
+      color:#fff;
+      padding:22px 16px;
+      position:sticky;
+      top:0;
+      height:100vh;
+      overflow:auto;
+    }
+
+    .brand{
+      padding:3px 8px 20px;
+      font-weight:850;
+      font-size:19px;
+    }
+
+    .brand small{
+      display:block;
+      font-size:11px;
+      color:#aaa0b5;
+      font-weight:500;
+      margin-top:6px;
+    }
+
+    .nav-group{
+      margin:13px 0 7px;
+      padding:0 10px;
+      color:#82778d;
+      font-size:10px;
+      font-weight:800;
+      letter-spacing:1.1px;
+    }
+
+    .nav-btn{
+      width:100%;
+      border:0;
+      background:transparent;
+      color:#cfc6d8;
+      text-align:left;
+      padding:11px 12px;
+      border-radius:11px;
+      cursor:pointer;
+      margin:2px 0;
+    }
+
+    .nav-btn:hover,
+    .nav-btn.active{
+      background:#30223d;
+      color:#fff;
+    }
+
+    .main{
+      padding:27px;
+      min-width:0;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:18px;
+      margin-bottom:18px;
+    }
+
+    .topbar h1{
+      margin:0;
+      font-size:26px;
+    }
+
+    .topbar p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .controls{
+      display:flex;
+      gap:9px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    select,
+    input,
+    .action{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:10px;
+      padding:9px 12px;
+    }
+
+    .action{cursor:pointer}
+
+    .status{
+      font-size:11px;
+      color:var(--muted);
+      margin-top:7px;
+      text-align:right;
+    }
+
+    .page{display:none}
+    .page.active{display:block}
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:17px;
+      box-shadow:var(--shadow);
+    }
+
+    .hero{
+      padding:22px;
+      margin-bottom:13px;
+      background:linear-gradient(135deg,#fff,#f2ecff);
+      border:1px solid #ded0ff;
+      border-radius:18px;
+    }
+
+    .hero strong{font-size:21px}
+
+    .hero p{
+      color:var(--muted);
+      margin:7px 0 0;
+      font-size:13px;
+    }
+
+    .kpis{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:13px;
+      margin-bottom:13px;
+    }
+
+    .kpi{
+      padding:16px;
+      min-height:112px;
+    }
+
+    .label{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .value{
+      font-size:23px;
+      font-weight:820;
+      margin:9px 0 6px;
+    }
+
+    .delta{
+      font-size:12px;
+      color:var(--purple);
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns:1.4fr 1fr;
+      gap:13px;
+      margin-bottom:13px;
+    }
+
+    .chart-card,
+    .table-card,
+    .section-card{
+      padding:16px;
+    }
+
+    .card h2{
+      font-size:14px;
+      margin:0 0 14px;
+    }
+
+    .chartbox{height:315px}
+
+    .promotion-filter{
+      padding:17px;
+      margin-bottom:13px;
+      display:flex;
+      justify-content:center;
+      gap:18px;
+      align-items:end;
+      flex-wrap:wrap;
+    }
+
+    .filter-item{
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+    }
+
+    .filter-item span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:650;
+    }
+
+    .filter-item select{
+      min-width:260px;
+      max-width:420px;
+    }
+
+    .date-row{
+      display:flex;
+      gap:7px;
+      align-items:center;
+    }
+
+    .date-row input{min-width:150px}
+
+    .summary{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:11px;
+      margin-bottom:13px;
+    }
+
+    .summary-card{
+      padding:15px;
+    }
+
+    .summary-card span{
+      color:var(--muted);
+      font-size:11px;
+    }
+
+    .summary-card b{
+      display:block;
+      margin-top:7px;
+      font-size:20px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+
+    th,td{
+      padding:10px 8px;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+    }
+
+    th{
+      color:var(--muted);
+      font-weight:650;
+    }
+
+    .rank{
+      display:inline-grid;
+      place-items:center;
+      width:24px;
+      height:24px;
+      border-radius:50%;
+      background:var(--lav);
+      color:var(--purple);
+      font-weight:800;
+    }
+
+    .placeholder{
+      padding:30px;
+      color:var(--muted);
+      line-height:1.8;
+    }
+
+    .loading{
+      opacity:.55;
+      pointer-events:none;
+    }
+
+    @media(max-width:1080px){
+      .app{grid-template-columns:1fr}
+      .sidebar{position:relative;height:auto}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      .grid2{grid-template-columns:1fr}
+      .summary{grid-template-columns:repeat(2,1fr)}
+      .nav-group{display:none}
+      .sidebar nav{
+        display:grid;
+        grid-template-columns:repeat(4,1fr);
+        gap:5px;
+      }
+    }
+
+    @media(max-width:650px){
+      .main{padding:15px}
+      .topbar{display:block}
+      .controls{
+        justify-content:flex-start;
+        margin-top:14px;
+      }
+      .status{text-align:left}
+      .kpis,.summary{grid-template-columns:1fr}
+      .sidebar nav{grid-template-columns:1fr 1fr}
+      .promotion-filter{justify-content:flex-start}
+      .filter-item select{min-width:220px}
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      JP Business Platform
+      <small>2SLASH4 Japan Growth Hub</small>
+    </div>
+
+    <nav>
+      <div class="nav-group">OVERVIEW</div>
+      <button class="nav-btn active" data-page="executive">📊 Executive</button>
+
+      <div class="nav-group">COMMERCE</div>
+      <button class="nav-btn" data-page="sales">💰 Sales</button>
+      <button class="nav-btn" data-page="product">📦 Product</button>
+      <button class="nav-btn" data-page="promotion">🔥 Promotion</button>
+      <button class="nav-btn" data-page="kpi">🎯 KPI & Funnel</button>
+
+      <div class="nav-group">GROWTH</div>
+      <button class="nav-btn" data-page="marketing">📣 Marketing</button>
+      <button class="nav-btn" data-page="competitor">🏆 Competitor</button>
+
+      <div class="nav-group">PLANNING</div>
+      <button class="nav-btn" data-page="planning">📅 Planning</button>
+    </nav>
+  </aside>
+
+  <main class="main" id="appMain">
+
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">Executive Dashboard</h1>
+        <p id="pageSubtitle">Japan business overview & decision support</p>
+      </div>
+
+      <div>
+        <div class="controls">
+          <label>Month</label>
+          <select id="month"></select>
+          <button class="action" id="refresh">새로고침</button>
+        </div>
+
+        <div class="status" id="status">
+          Google Sheets 동기화 중…
+        </div>
+      </div>
+    </header>
+
+    <section class="page active" id="executive">
+      <div class="hero">
+        <strong>Japan Business Overview</strong>
+        <p>매출·전환·상품 성과를 한 화면에서 확인합니다.</p>
+      </div>
+
+      <div class="kpis">
+        <div class="card kpi">
+          <div class="label">월 매출액(¥)</div>
+          <div class="value" data-kpi="revenue">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">목표 달성률</div>
+          <div class="value" data-kpi="achievement">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">주문건수</div>
+          <div class="value" data-kpi="orders">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">주문전환율</div>
+          <div class="value" data-kpi="conversionRate">-</div>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <h2>연간 월별 매출 추이</h2>
+        <div class="chartbox">
+          <canvas id="executiveMonthlyChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="sales">
+      <div class="kpis">
+        <div class="card kpi">
+          <div class="label">월 매출목표</div>
+          <div class="value" data-kpi="target">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">월 매출액(¥)</div>
+          <div class="value" data-kpi="revenue">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">일 평균매출</div>
+          <div class="value" data-kpi="dailyAverage">-</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="label">객단가(¥)</div>
+          <div class="value" data-kpi="aov">-</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card chart-card">
+          <h2>일별 매출 추이</h2>
+          <div class="chartbox">
+            <canvas id="dailySalesChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h2>일별 KPI 추이</h2>
+          <div class="chartbox">
+            <canvas id="dailyFunnelChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="product">
+      <div class="hero">
+        <strong>Product Performance</strong>
+        <p>월별 판매량과 누적 판매량을 분리해서 확인합니다. 상단 Month를 바꾸면 선택 월 TOP10도 같이 변경됩니다.</p>
+      </div>
+
+      <div class="card chart-card" style="margin-bottom:13px">
+        <h2>상품별 월간 판매 추이 · 1월~8월</h2>
+        <div class="chartbox">
+          <canvas id="productTrendChart"></canvas>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card chart-card">
+          <h2 id="productMonthlyTopTitle">선택 월 판매량 TOP 10</h2>
+          <div class="chartbox">
+            <canvas id="productMonthlyTopChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h2>누적 판매량 TOP 10 · 1월~8월</h2>
+          <div class="chartbox">
+            <canvas id="productTotalChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card table-card">
+          <h2 id="productMonthlyTableTitle">선택 월 상품 순위</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>상품명</th>
+                <th>판매량</th>
+              </tr>
+            </thead>
+            <tbody id="productMonthlyRank"></tbody>
+          </table>
+        </div>
+
+        <div class="card table-card">
+          <h2>누적 상품 순위</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>상품명</th>
+                <th>누적 판매량</th>
+              </tr>
+            </thead>
+            <tbody id="productCumulativeRank"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="promotion">
+
+      <div class="hero">
+        <strong>Promotion Product Performance</strong>
+        <p>상품/기간별 판매 흐름과 MEGAWARI · MEGAPO 전체 성과를 함께 확인합니다.</p>
+      </div>
+
+      <!-- 상품별 일자 판매 -->
+      <div class="card promotion-filter">
+
+        <div class="filter-item">
+          <span>상품선택</span>
+          <select id="promoProductSelect">
+            <option>데이터 불러오는 중…</option>
+          </select>
+        </div>
+
+        <div class="filter-item">
+          <span>기간설정</span>
+          <div class="date-row">
+            <input type="date" id="promoStartDate">
+            <span>~</span>
+            <input type="date" id="promoEndDate">
+          </div>
+        </div>
+
+        <button class="action" id="promoApply">조회</button>
+
+      </div>
+
+      <div class="summary">
+        <div class="card summary-card">
+          <span>기간 판매수량</span>
+          <b id="promoPeriodQty">-</b>
+        </div>
+
+        <div class="card summary-card">
+          <span>일 평균 판매수량</span>
+          <b id="promoDailyAvgQty">-</b>
+        </div>
+
+        <div class="card summary-card">
+          <span>최고 판매일</span>
+          <b id="promoBestDay">-</b>
+        </div>
+
+        <div class="card summary-card">
+          <span>기간 TOP 상품</span>
+          <b id="promoTopProduct">-</b>
+        </div>
+      </div>
+
+      <div class="card chart-card" style="margin-bottom:13px">
+        <h2>상품별 일자별 판매 추이</h2>
+        <div class="chartbox">
+          <canvas id="promoProductDailyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 프로모션 전체 매출 -->
+      <div class="grid2">
+        <div class="card chart-card">
+          <h2>MEGAWARI 분기별 총매출</h2>
+          <div class="chartbox">
+            <canvas id="megaWariTotalChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h2>MEGAPO 월별 총매출</h2>
+          <div class="chartbox">
+            <canvas id="megaPoTotalChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card table-card">
+          <h2>MEGAWARI 성과 요약</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>분기</th>
+                <th>기간</th>
+                <th>총매출</th>
+                <th>QoQ</th>
+              </tr>
+            </thead>
+            <tbody id="megaWariTable"></tbody>
+          </table>
+        </div>
+
+        <div class="card table-card">
+          <h2>MEGAPO 성과 요약</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>월</th>
+                <th>기간</th>
+                <th>총매출</th>
+                <th>증감</th>
+              </tr>
+            </thead>
+            <tbody id="megaPoTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="page" id="kpi">
+      <div class="hero">
+        <strong>KPI & Funnel</strong>
+        <p>유입자수 → 장바구니 → 주문완료 → 주문전환율 흐름을 확인합니다.</p>
+      </div>
+
+      <div class="card chart-card">
+        <h2>일별 퍼널 KPI</h2>
+        <div class="chartbox">
+          <canvas id="kpiFullChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="marketing">
+      <div class="hero">
+        <strong>Marketing Dashboard</strong>
+        <p>Paid media · Influencer · UGC</p>
+      </div>
+      <div class="card placeholder">마케팅 Raw Data 연결 예정</div>
+    </section>
+
+    <section class="page" id="competitor">
+      <div class="hero">
+        <strong>Competitor Watch</strong>
+        <p>Japan beauty market benchmark</p>
+      </div>
+      <div class="card placeholder">경쟁사 Raw Data 연결 예정</div>
+    </section>
+
+    <section class="page" id="planning">
+      <div class="hero">
+        <strong>Annual Planning</strong>
+        <p>Launch · Promotion · Marketing calendar</p>
+      </div>
+      <div class="card placeholder">연간 캘린더 연결 예정</div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  let DATA = {};
+  let PROMO_OPTIONS_LOADED = false;
+  const charts = {};
+
+  const nf = value =>
+    new Intl.NumberFormat(
+      "ja-JP",
+      { maximumFractionDigits: 0 }
+    ).format(Number(value || 0));
+
+  function destroyChart(name) {
+    if (charts[name]) {
+      charts[name].destroy();
+      delete charts[name];
+    }
+  }
+
+  function setLoading(value) {
+    document
+      .getElementById("appMain")
+      .classList
+      .toggle("loading", value);
+  }
+
+  function loadData() {
+    setLoading(true);
+
+    const statusEl = document.getElementById("status");
+    statusEl.textContent = "Google Sheets 동기화 중…";
+
+    const selectedMonth =
+      Number(document.getElementById("month").value) || undefined;
+
+    google.script.run
+      .withSuccessHandler(result => {
+        try {
+          if (!result) {
+            throw new Error("Apps Script에서 데이터가 비어있게 반환되었습니다.");
+          }
+
+          DATA = result;
+
+          // 각 렌더 함수 하나가 실패해도 전체 화면이 멈추지 않게 처리
+          safeRun_("fillMonths", fillMonths);
+          safeRun_("renderKpis", renderKpis);
+          safeRun_("renderExecutive", renderExecutive);
+          safeRun_("renderSales", renderSales);
+          safeRun_("renderProduct", renderProduct);
+          safeRun_("renderPromotionBaseCharts", renderPromotionBaseCharts);
+          safeRun_("renderKpi", renderKpi);
+
+          statusEl.textContent =
+            "Last Update · " + (DATA.generatedAt || "-");
+
+        } catch (error) {
+          console.error("Dashboard render error:", error);
+          statusEl.textContent =
+            "화면 오류 · " + (error.message || error);
+        } finally {
+          setLoading(false);
+        }
+      })
+      .withFailureHandler(error => {
+        console.error("Apps Script error:", error);
+
+        statusEl.textContent =
+          "연동 실패 · " +
+          (
+            error && error.message
+              ? error.message
+              : String(error)
+          );
+
+        setLoading(false);
+      })
+      .getPlatformData(selectedMonth);
+  }
+
+  function safeRun_(name, fn) {
+    try {
+      fn();
+    } catch (error) {
+      console.error(name + " 오류:", error);
+    }
+  }
+
+  function fillMonths() {
+    const select = document.getElementById("month");
+    const current = String((DATA.kpi && DATA.kpi.month) || "");
+
+    select.innerHTML = "";
+
+    const months = Array.isArray(DATA.availableMonths)
+      ? DATA.availableMonths
+      : [];
+
+    months.forEach(label => {
+      const option = document.createElement("option");
+
+      option.value = String(parseInt(label));
+      option.textContent = label;
+
+      select.appendChild(option);
+    });
+
+    select.value = current;
+  }
+
+  function renderAll() {
+    renderKpis();
+    renderExecutive();
+    renderSales();
+    renderProduct();
+    renderPromotionBaseCharts();
+    renderKpi();
+  }
+
+  function renderKpis() {
+    document
+      .querySelectorAll("[data-kpi]")
+      .forEach(element => {
+        const key = element.dataset.kpi;
+        const value = DATA.kpi ? DATA.kpi[key] : 0;
+
+        if (key === "achievement") {
+          element.textContent =
+            Math.round(Number(value || 0) * 100) + "%";
+        } else if (key === "conversionRate") {
+          element.textContent =
+            Number(value || 0).toFixed(2) + "%";
+        } else {
+          element.textContent = nf(value);
+        }
+      });
+  }
+
+  function renderExecutive() {
+    const months = DATA.availableMonths || [];
+
+    destroyChart("executiveMonthly");
+
+    charts.executiveMonthly = new Chart(
+      document.getElementById("executiveMonthlyChart"),
+      {
+        type: "bar",
+
+        data: {
+          labels: months,
+
+          datasets: [{
+            label: "월 매출",
+            data: months.map(month =>
+              DATA.monthlySummary[month]?.revenue || 0
+            ),
+            backgroundColor: "rgba(124,58,237,.72)",
+            borderRadius: 7
+          }]
+        },
+
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+
+            y: {
+              beginAtZero: true,
+
+              grid: {
+                color: "#eeeaf2"
+              },
+
+              ticks: {
+                callback: value => nf(value)
+              }
+            }
+          }
+        }
+      }
+    );
+  }
+
+  function renderSales() {
+    const month = DATA.kpi.monthLabel;
+
+    const sales =
+      DATA.dailySales[month] ||
+      { dates: [], revenue: [] };
+
+    destroyChart("dailySales");
+
+    charts.dailySales = new Chart(
+      document.getElementById("dailySalesChart"),
+      {
+        type: "line",
+
+        data: {
+          labels: sales.dates.map(date => date.slice(5)),
+
+          datasets: [{
+            label: "매출액",
+            data: sales.revenue,
+            borderColor: "#8b5cf6",
+            backgroundColor: "rgba(139,92,246,.10)",
+            fill: true,
+            tension: .3,
+            pointRadius: 2
+          }]
+        },
+
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      }
+    );
+
+    buildFunnelChart(
+      "dailyFunnelChart",
+      "dailyFunnel"
+    );
+  }
+
+  function buildFunnelChart(canvasId, key) {
+    const month = DATA.kpi.monthLabel;
+
+    const daily =
+      DATA.dailyFunnel[month] ||
+      {
+        dates: [],
+        visitors: [],
+        carts: [],
+        completedOrders: [],
+        conversionRate: []
+      };
+
+    destroyChart(key);
+
+    charts[key] = new Chart(
+      document.getElementById(canvasId),
+      {
+        type: "line",
+
+        data: {
+          labels:
+            daily.dates.map(date => date.slice(5)),
+
+          datasets: [
+            {
+              label: "유입자수",
+              data: daily.visitors,
+              borderColor: "#8b5cf6",
+              yAxisID: "y"
+            },
+            {
+              label: "장바구니",
+              data: daily.carts,
+              borderColor: "#ef4444",
+              yAxisID: "y1"
+            },
+            {
+              label: "주문완료",
+              data: daily.completedOrders,
+              borderColor: "#f59e0b",
+              yAxisID: "y1"
+            },
+            {
+              label: "주문전환율(%)",
+              data: daily.conversionRate,
+              borderColor: "#16a34a",
+              yAxisID: "y2"
+            }
+          ]
+        },
+
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+
+          scales: {
+            y: {
+              position: "left"
+            },
+
+            y1: {
+              position: "right",
+              grid: {
+                display: false
+              }
+            },
+
+            y2: {
+              display: false
+            }
+          }
+        }
+      }
+    );
+  }
+
+  function renderProduct() {
+    const monthlyLabels = [
+      "1월","2월","3월","4월",
+      "5월","6월","7월","8월"
+    ];
+
+    const selectedMonth = Number(DATA.kpi?.month || 1);
+    const selectedMonthLabel = selectedMonth + "월";
+
+    // -------------------------
+    // A. 상품별 월간 추이
+    // 누적판매량 상위 5개 상품의 1~8월 흐름
+    // -------------------------
+    const topProducts =
+      (DATA.productTotals || []).slice(0, 5);
+
+    destroyChart("productTrend");
+
+    charts.productTrend = new Chart(
+      document.getElementById("productTrendChart"),
+      {
+        type: "line",
+        data: {
+          labels: monthlyLabels,
+          datasets: topProducts.map(product => ({
+            label: product.name,
+            data: product.months.slice(0, 8),
+            tension: .28,
+            pointRadius: 3,
+            borderWidth: 2
+          }))
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: "top",
+              labels: {
+                usePointStyle: true,
+                boxWidth: 8
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: "#eeeaf2"
+              },
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      }
+    );
+
+    // -------------------------
+    // B. 선택 월 판매량 TOP10
+    // products = [상품명, 1월, 2월 ... 8월]
+    // selectedMonth가 8이면 index 8 = 8월 값
+    // -------------------------
+    const monthlyRanking =
+      (DATA.products || [])
+        .map(row => ({
+          name: row[0],
+          value: Number(row[selectedMonth] || 0)
+        }))
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value);
+
+    const monthlyTop10 = monthlyRanking.slice(0, 10);
+
+    document.getElementById(
+      "productMonthlyTopTitle"
+    ).textContent =
+      selectedMonthLabel + " 판매량 TOP 10";
+
+    document.getElementById(
+      "productMonthlyTableTitle"
+    ).textContent =
+      selectedMonthLabel + " 상품 순위";
+
+    destroyChart("productMonthlyTop");
+
+    charts.productMonthlyTop = new Chart(
+      document.getElementById("productMonthlyTopChart"),
+      {
+        type: "bar",
+        data: {
+          labels: monthlyTop10.map(item => item.name),
+          datasets: [{
+            label: selectedMonthLabel + " 판매량",
+            data: monthlyTop10.map(item => item.value),
+            backgroundColor: "rgba(168,85,247,.72)",
+            borderRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: {
+                color: "#eeeaf2"
+              },
+              ticks: {
+                precision: 0
+              }
+            },
+            y: {
+              grid: {
+                display: false
+              }
+            }
+          }
+        }
+      }
+    );
+
+    document.getElementById(
+      "productMonthlyRank"
+    ).innerHTML =
+      monthlyTop10.length
+        ? monthlyTop10.map((item, index) => `
+            <tr>
+              <td><span class="rank">${index + 1}</span></td>
+              <td>${item.name}</td>
+              <td>${nf(item.value)}</td>
+            </tr>
+          `).join("")
+        : `
+          <tr>
+            <td colspan="3" style="color:#7d7488;">
+              ${selectedMonthLabel} 판매 데이터가 없습니다.
+            </td>
+          </tr>
+        `;
+
+    // -------------------------
+    // C. 누적 판매량 TOP10
+    // 1월~8월 합계
+    // -------------------------
+    const cumulativeRanking =
+      (DATA.productTotals || [])
+        .map(product => ({
+          name: product.name,
+          total: product.months
+            .slice(0, 8)
+            .reduce(
+              (sum, value) => sum + Number(value || 0),
+              0
+            )
+        }))
+        .sort((a, b) => b.total - a.total);
+
+    const cumulativeTop10 =
+      cumulativeRanking.slice(0, 10);
+
+    destroyChart("productTotal");
+
+    charts.productTotal = new Chart(
+      document.getElementById("productTotalChart"),
+      {
+        type: "bar",
+        data: {
+          labels:
+            cumulativeTop10.map(item => item.name),
+          datasets: [{
+            label: "누적 판매량",
+            data:
+              cumulativeTop10.map(item => item.total),
+            backgroundColor:
+              "rgba(124,58,237,.72)",
+            borderRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: {
+                color: "#eeeaf2"
+              },
+              ticks: {
+                precision: 0
+              }
+            },
+            y: {
+              grid: {
+                display: false
+              }
+            }
+          }
+        }
+      }
+    );
+
+    document.getElementById(
+      "productCumulativeRank"
+    ).innerHTML =
+      cumulativeRanking.map((item, index) => `
+        <tr>
+          <td><span class="rank">${index + 1}</span></td>
+          <td>${item.name}</td>
+          <td>${nf(item.total)}</td>
+        </tr>
+      `).join("");
+  }
+
+  // =====================================================
+  // PROMOTION - 상품별 일자별 판매 추이
+  // =====================================================
+
+  function renderPromotion() {
+    renderPromotionBaseCharts();
+
+    if (!PROMO_OPTIONS_LOADED) {
+      loadPromotionProductOptions();
+    }
+  }
+
+  function loadPromotionProductOptions() {
+    const select = document.getElementById("promoProductSelect");
+
+    if (!select) return;
+
+    select.innerHTML =
+      '<option value="__ALL__">전체 상품 (기간 TOP 8)</option>';
+
+    google.script.run
+      .withSuccessHandler(result => {
+        try {
+          const options = result || {};
+
+          (options.products || []).forEach(productName => {
+            const option = document.createElement("option");
+            option.value = productName;
+            option.textContent = productName;
+            select.appendChild(option);
+          });
+
+          const start = document.getElementById("promoStartDate");
+          const end = document.getElementById("promoEndDate");
+
+          if (options.minDate) {
+            start.min = options.minDate;
+            end.min = options.minDate;
+          }
+
+          if (options.maxDate) {
+            start.max = options.maxDate;
+            end.max = options.maxDate;
+          }
+
+          if (!end.value && options.maxDate) {
+            end.value = options.maxDate;
+          }
+
+          if (!start.value && options.maxDate) {
+            const d = new Date(options.maxDate + "T00:00:00");
+            d.setDate(d.getDate() - 13);
+            const candidate = d.toISOString().slice(0,10);
+            start.value =
+              options.minDate && candidate < options.minDate
+                ? options.minDate
+                : candidate;
+          }
+
+          PROMO_OPTIONS_LOADED = true;
+          renderPromotionProductDaily();
+
+        } catch (error) {
+          console.error("Promotion options render error:", error);
+        }
+      })
+      .withFailureHandler(error => {
+        console.error("Promotion options error:", error);
+      })
+      .getPromotionProductOptions();
+  }
+
+  function renderPromotionProductDaily() {
+    const select = document.getElementById("promoProductSelect");
+
+    if (!select) return;
+
+    const selected = select.value || "__ALL__";
+    const startValue = document.getElementById("promoStartDate").value;
+    const endValue = document.getElementById("promoEndDate").value;
+
+    document.getElementById("promoPeriodQty").textContent = "…";
+    document.getElementById("promoDailyAvgQty").textContent = "…";
+    document.getElementById("promoBestDay").textContent = "…";
+    document.getElementById("promoTopProduct").textContent = "…";
+
+    google.script.run
+      .withSuccessHandler(result => {
+        try {
+          const payload = result || {
+            labels: [],
+            datasets: [],
+            summary: {}
+          };
+
+          destroyChart("promoProductDaily");
+
+          charts.promoProductDaily = new Chart(
+            document.getElementById("promoProductDailyChart"),
+            {
+              type: "line",
+              data: {
+                labels: (payload.labels || []).map(date => date.slice(5)),
+                datasets: (payload.datasets || []).map((dataset, index) => {
+                  const single = (payload.datasets || []).length === 1;
+
+                  const base = {
+                    label: dataset.label,
+                    data: dataset.values || [],
+                    tension: .25,
+                    pointRadius: 3,
+                    borderWidth: 2
+                  };
+
+                  if (single) {
+                    base.borderColor = "#8b5cf6";
+                    base.backgroundColor = "rgba(139,92,246,.10)";
+                    base.fill = true;
+                  }
+
+                  return base;
+                })
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                  mode: "index",
+                  intersect: false
+                },
+                plugins: {
+                  legend: {
+                    position: "top",
+                    labels: {
+                      usePointStyle: true,
+                      boxWidth: 8
+                    }
+                  }
+                },
+                scales: {
+                  x: {
+                    grid: {
+                      display: false
+                    }
+                  },
+                  y: {
+                    beginAtZero: true,
+                    grid: {
+                      color: "#eeeaf2"
+                    },
+                    ticks: {
+                      precision: 0
+                    }
+                  }
+                }
+              }
+            }
+          );
+
+          const summary = payload.summary || {};
+
+          document.getElementById("promoPeriodQty").textContent =
+            nf(summary.total || 0);
+
+          document.getElementById("promoDailyAvgQty").textContent =
+            Number(summary.average || 0).toFixed(1);
+
+          document.getElementById("promoBestDay").textContent =
+            summary.bestDay || "-";
+
+          document.getElementById("promoTopProduct").textContent =
+            summary.topProduct || "-";
+
+        } catch (error) {
+          console.error("Promotion daily render error:", error);
+        }
+      })
+      .withFailureHandler(error => {
+        console.error("Promotion daily data error:", error);
+
+        document.getElementById("promoPeriodQty").textContent = "오류";
+        document.getElementById("promoDailyAvgQty").textContent = "오류";
+        document.getElementById("promoBestDay").textContent = "오류";
+        document.getElementById("promoTopProduct").textContent = "오류";
+      })
+      .getPromotionProductDaily(
+        selected,
+        startValue,
+        endValue
+      );
+  }
+
+  function renderPromotionBaseCharts() {
+    const megaWari =
+      DATA.promotion?.megaWari || [];
+
+    const megaPo =
+      DATA.promotion?.megaPo || [];
+
+    // -------------------------
+    // MEGAWARI 분기별 총매출
+    // -------------------------
+    destroyChart("megaWariTotal");
+
+    charts.megaWariTotal = new Chart(
+      document.getElementById("megaWariTotalChart"),
+      {
+        type: "bar",
+        data: {
+          labels: megaWari.map(row => row.label),
+          datasets: [{
+            label: "총매출",
+            data: megaWari.map(row => Number(row.total || 0)),
+            backgroundColor: "rgba(124,58,237,.72)",
+            borderRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: "#eeeaf2"
+              },
+              ticks: {
+                callback: value => nf(value)
+              }
+            }
+          }
+        }
+      }
+    );
+
+    // -------------------------
+    // MEGAPO 월별 총매출
+    // -------------------------
+    destroyChart("megaPoTotal");
+
+    charts.megaPoTotal = new Chart(
+      document.getElementById("megaPoTotalChart"),
+      {
+        type: "bar",
+        data: {
+          labels: megaPo.map(row => row.label),
+          datasets: [{
+            label: "총매출",
+            data: megaPo.map(row => Number(row.total || 0)),
+            backgroundColor: "rgba(168,85,247,.72)",
+            borderRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: "#eeeaf2"
+              },
+              ticks: {
+                callback: value => nf(value)
+              }
+            }
+          }
+        }
+      }
+    );
+
+    // -------------------------
+    // 성과 요약 표
+    // -------------------------
+    const mwTable = document.getElementById("megaWariTable");
+    if (mwTable) {
+      mwTable.innerHTML = megaWari.length
+        ? megaWari.map(row => `
+            <tr>
+              <td>${row.label || "-"}</td>
+              <td>${row.period || "-"}</td>
+              <td>${nf(row.total || 0)}</td>
+              <td>${row.growth || "-"}</td>
+            </tr>
+          `).join("")
+        : `
+          <tr>
+            <td colspan="4" style="color:#7d7488;">데이터가 없습니다.</td>
+          </tr>
+        `;
+    }
+
+    const mpTable = document.getElementById("megaPoTable");
+    if (mpTable) {
+      mpTable.innerHTML = megaPo.length
+        ? megaPo.map(row => `
+            <tr>
+              <td>${row.label || "-"}</td>
+              <td>${row.period || "-"}</td>
+              <td>${nf(row.total || 0)}</td>
+              <td>${row.growth || "-"}</td>
+            </tr>
+          `).join("")
+        : `
+          <tr>
+            <td colspan="4" style="color:#7d7488;">데이터가 없습니다.</td>
+          </tr>
+        `;
+    }
+  }
+
+  function renderKpi() {
+    buildFunnelChart(
+      "kpiFullChart",
+      "kpiFull"
+    );
+  }
+
+  // ---------------------------
+  // Events
+  // ---------------------------
+
+  const titles = {
+    executive: [
+      "Executive Dashboard",
+      "Japan business overview & decision support"
+    ],
+
+    sales: [
+      "Sales Dashboard",
+      "Revenue, orders and conversion monitoring"
+    ],
+
+    product: [
+      "Product Dashboard",
+      "SKU performance & product mix"
+    ],
+
+    promotion: [
+      "Promotion Dashboard",
+      "Product daily performance"
+    ],
+
+    kpi: [
+      "KPI & Funnel",
+      "Visitors, carts, orders and conversion"
+    ],
+
+    marketing: [
+      "Marketing Dashboard",
+      "Paid media, influencer & UGC"
+    ],
+
+    competitor: [
+      "Competitor Watch",
+      "Japan beauty market benchmark"
+    ],
+
+    planning: [
+      "Annual Planning",
+      "Launch, promotion & marketing calendar"
+    ]
+  };
+
+  document
+    .querySelectorAll(".nav-btn")
+    .forEach(button => {
+      button.addEventListener(
+        "click",
+        () => {
+          document
+            .querySelectorAll(".nav-btn")
+            .forEach(item =>
+              item.classList.remove("active")
+            );
+
+          document
+            .querySelectorAll(".page")
+            .forEach(item =>
+              item.classList.remove("active")
+            );
+
+          button.classList.add("active");
+
+          document
+            .getElementById(
+              button.dataset.page
+            )
+            .classList.add("active");
+
+          document.getElementById(
+            "pageTitle"
+          ).textContent =
+            titles[button.dataset.page][0];
+
+          document.getElementById(
+            "pageSubtitle"
+          ).textContent =
+            titles[button.dataset.page][1];
+
+          if (button.dataset.page === "promotion") {
+            renderPromotion();
+          }
+        }
+      );
+    });
+
+  document
+    .getElementById("month")
+    .addEventListener(
+      "change",
+      loadData
+    );
+
+  document
+    .getElementById("refresh")
+    .addEventListener(
+      "click",
+      loadData
+    );
+
+  document
+    .getElementById("promoApply")
+    .addEventListener(
+      "click",
+      renderPromotionProductDaily
+    );
+
+  document
+    .getElementById("promoProductSelect")
+    .addEventListener(
+      "change",
+      renderPromotionProductDaily
+    );
+
+  document
+    .getElementById("promoStartDate")
+    .addEventListener(
+      "change",
+      renderPromotionProductDaily
+    );
+
+  document
+    .getElementById("promoEndDate")
+    .addEventListener(
+      "change",
+      renderPromotionProductDaily
+    );
+
+
+  window.addEventListener("error", function(event) {
+    const statusEl = document.getElementById("status");
+    if (statusEl) {
+      statusEl.textContent =
+        "JS 오류 · " + (event.message || "알 수 없는 오류");
+    }
+    console.error("Global JS error:", event.error || event.message);
+  });
+
+  window.addEventListener("unhandledrejection", function(event) {
+    const statusEl = document.getElementById("status");
+    if (statusEl) {
+      statusEl.textContent =
+        "Promise 오류 · " +
+        (
+          event.reason && event.reason.message
+            ? event.reason.message
+            : String(event.reason)
+        );
+    }
+    console.error("Unhandled promise:", event.reason);
+  });
+
+  loadData();
+</script>
+
+</body>
+</html>
