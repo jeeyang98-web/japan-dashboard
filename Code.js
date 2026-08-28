@@ -568,13 +568,18 @@ function getTotalBusinessData(month) {
   const monthlyJpJpy = jpRevenueItem ? jpRevenueItem.months.slice() : new Array(12).fill(0);
 
   const krClose = getKrMonthlyClose_();
+  const liveRate = getLiveJpyKrwRate_();
   const exchangeRates = {};
   let lastKnownRate = 0;
 
+  // 마감이 끝난 달(월마감 시트에 실제 환산 환율이 남아있는 달)은 그 실제
+  // 환율을 그대로 쓰고, 아직 마감 전이라 실제 환율이 없는 달(예: 이번 달)은
+  // 구글 파이낸스 실시간 환율로 대체합니다. 실시간 환율 조회가 실패하면
+  // (예: GOOGLEFINANCE 일시 오류) 가장 최근 마감월의 환율로 대체합니다.
   for (let m = 1; m <= 12; m++) {
     const rate = krClose.impliedRate[m - 1];
     if (rate) lastKnownRate = rate;
-    exchangeRates[String(m)] = rate || lastKnownRate;
+    exchangeRates[String(m)] = rate || liveRate || lastKnownRate;
   }
 
   const monthlyJpKrw = monthlyJpJpy.map((jpy, idx) =>
@@ -637,6 +642,44 @@ function getTotalBusinessData(month) {
       "yyyy-MM-dd HH:mm:ss"
     )
   };
+}
+
+/**
+ * 구글 파이낸스(GOOGLEFINANCE) 실시간 JPY→KRW 환율을 가져옵니다.
+ * Apps Script에는 GOOGLEFINANCE를 직접 호출하는 API가 없어서, 스프레드시트의
+ * 미사용 셀(BZ1)에 수식을 잠깐 써넣고 재계산된 값을 읽은 뒤 바로 지웁니다.
+ * 30분 CacheService 캐시로 매 요청마다 셀을 건드리지 않게 합니다. 실패 시
+ * null을 반환하며, 호출부는 시트에 기록된 과거 환율로 대체(fallback)합니다.
+ */
+function getLiveJpyKrwRate_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("live-fx-jpy-krw");
+  if (cached) return Number(cached);
+
+  let rate = null;
+
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    const sheet = requireSheet_(ss, "월마감");
+    const cell = sheet.getRange("BZ1");
+
+    cell.setFormula('=GOOGLEFINANCE("CURRENCY:JPYKRW")');
+    SpreadsheetApp.flush();
+    Utilities.sleep(1500);
+
+    const value = cell.getValue();
+
+    cell.clearContent();
+    SpreadsheetApp.flush();
+
+    if (typeof value === "number" && value > 0) rate = value;
+  } catch (err) {
+    rate = null;
+  }
+
+  if (rate) cache.put("live-fx-jpy-krw", String(rate), 1800);
+
+  return rate;
 }
 
 /**
@@ -1121,7 +1164,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v3:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v4:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
