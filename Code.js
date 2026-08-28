@@ -187,7 +187,12 @@ function getPlatformData(selectedMonth) {
     if (idx >= 1 && idx <= 12) {
       dailyByMonth[String(idx)] = {
         labels: dailySales[label].dates,
-        datasets: [{ label: "JP daily sales", data: dailySales[label].revenue }]
+        datasets: [{
+          label: "JP daily sales",
+          data: dailySales[label].revenue,
+          backgroundColor: "#5a4ff3",
+          borderColor: "#5a4ff3"
+        }]
       };
     }
   });
@@ -1109,7 +1114,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v1:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v2:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
