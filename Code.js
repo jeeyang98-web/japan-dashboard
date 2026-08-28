@@ -221,12 +221,19 @@ function getPlatformData(selectedMonth) {
   const targets = new Array(12).fill(0);
   targets[month - 1] = kpi.target;
 
+  // squirrelfish JP Executive 페이지의 "상품별 매출" 차트가 기대하는
+  // 월별 상품 랭킹(Record<month, {name, quantity}[]>). "상품별 매출" 시트의
+  // 일별 수량을 월 단위로 합산합니다. (기존 products 필드는 index.html 레거시
+  // 대시보드가 그대로 쓰고 있어 건드리지 않고, 별도 필드로 추가)
+  const jpProducts = getJpMonthlyProductRows_();
+
   return {
     kpi: kpi,
     dailySales: dailySales,
     dailyFunnel: dailyFunnel,
     monthlySummary: monthlySummary,
     products: products,
+    jpProducts: jpProducts,
     productTotals: productTotals,
     promotion: promotion,
     availableMonths: availableMonths,
@@ -1114,7 +1121,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v2:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v3:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
