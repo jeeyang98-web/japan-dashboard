@@ -569,6 +569,39 @@ function getTotalBusinessData(month) {
     Math.round(jpy * (exchangeRates[String(idx + 1)] || 0))
   );
 
+  // squirrelfish Total 페이지의 채널별/주문건수/상품별 차트가 기대하는 필드들.
+  // channels: 국내 9개 채널(월마감 "1. 채널별 월마감 매출액" 섹션) +
+  // 일본 큐텐/기타(같은 KR 시트의 엔화/원화 병기 컬럼)를 월별 매출액(KRW)으로.
+  const channels = getKrChannelRevenue_();
+  channels["Qoo10 (JP)"] = krClose.monthlyJpQoo10Krw;
+  channels["기타 (JP)"] = krClose.monthlyJpOtherKrw;
+
+  const ordersKr = getKrMonthlyOrders_();
+  const ordersJp = getJpMonthlyOrders_();
+
+  // products: KR 라인별매출(피봇) 월별 수량 + JP 상품별 매출 시트의 월별 수량을
+  // 상품명 기준으로 합산한 TOTAL(KR+JP) 월별 판매수량 랭킹.
+  const krLines = getKrLineProductRows_();
+  const jpMonthlyProducts = getJpMonthlyProductRows_();
+  const products = {};
+
+  for (let m = 1; m <= 12; m++) {
+    const combined = {};
+
+    krLines.forEach(line => {
+      const qty = line.monthly[m - 1].quantity;
+      if (qty > 0) combined[line.name] = (combined[line.name] || 0) + qty;
+    });
+
+    (jpMonthlyProducts[String(m)] || []).forEach(item => {
+      combined[item.name] = (combined[item.name] || 0) + item.quantity;
+    });
+
+    products[String(m)] = Object.keys(combined)
+      .map(name => ({ name: name, quantity: combined[name] }))
+      .sort((a, b) => b.quantity - a.quantity);
+  }
+
   return {
     month: month,
     monthLabel: month + "월",
@@ -582,6 +615,10 @@ function getTotalBusinessData(month) {
     exchangeRates: exchangeRates,
     krTargets: krClose.krTargets,
     targets: krClose.krTargets,
+    channels: channels,
+    ordersKr: ordersKr,
+    ordersJp: ordersJp,
+    products: products,
     generatedAt: Utilities.formatDate(
       new Date(),
       "Asia/Seoul",
@@ -606,6 +643,8 @@ function getKrMonthlyClose_() {
   const monthlyKr = [];
   const impliedRate = [];
   const krTargets = [];
+  const monthlyJpQoo10Krw = []; // col31: 큐텐 매출액(KRW)
+  const monthlyJpOtherKrw = []; // col34: 기타(JP) 매출액(KRW)
 
   for (let i = 0; i < 12; i++) {
     const row = section1[i] || [];
@@ -616,13 +655,152 @@ function getKrMonthlyClose_() {
     monthlyKr.push(domestic);
     impliedRate.push(jpJpy ? jpKrw / jpJpy : 0);
     krTargets.push(toNumber_((targetColumn[i] || [])[0]));
+    monthlyJpQoo10Krw.push(jpKrw);
+    monthlyJpOtherKrw.push(toNumber_(row[8])); // col34
   }
 
   return {
     monthlyKr: monthlyKr,
     impliedRate: impliedRate,
-    krTargets: krTargets
+    krTargets: krTargets,
+    monthlyJpQoo10Krw: monthlyJpQoo10Krw,
+    monthlyJpOtherKrw: monthlyJpOtherKrw
   };
+}
+
+/**
+ * "월마감" 시트의 "1. 채널별 월마감 매출액" 섹션(A1:Z16)에서 국내 채널별
+ * 월 매출액(VAT 제외, 배송비 별도 컬럼이 있는 채널은 매출액만)을 반환합니다.
+ * 채널: 자사몰/네이버 스마트스토어/29CM/카카오 선물하기/글로벌몰/
+ * 아모레 오프라인/CJ 올리브영/CJ ENM/기타. (getTotalBusinessData 의
+ * channels 필드에서 사용)
+ */
+function getKrChannelRevenue_() {
+  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "월마감");
+
+  const raw = sheet.getRange(5, 1, 12, 26).getDisplayValues();
+
+  const channelColumns = [
+    ["자사몰", 4],
+    ["네이버 스마트스토어", 8],
+    ["29CM", 12],
+    ["카카오 선물하기", 16],
+    ["글로벌몰", 18],
+    ["아모레 오프라인", 20],
+    ["CJ 올리브영", 22],
+    ["CJ ENM", 24],
+    ["기타", 25]
+  ];
+
+  const channels = {};
+
+  channelColumns.forEach(([name, col]) => {
+    channels[name] = raw.map(row => toNumber_(row[col - 1]));
+  });
+
+  return channels;
+}
+
+/**
+ * "월마감" 시트의 자사몰 방문/구매 섹션(getKoreaFunnelData 와 동일한 범위)에서
+ * 월별 국내 주문건수만 뽑아옵니다. (getTotalBusinessData 의 ordersKr 필드에서 사용)
+ */
+function getKrMonthlyOrders_() {
+  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "월마감");
+
+  const raw = sheet.getRange(72, 1, 39, 10).getDisplayValues();
+  const orders = new Array(12).fill(0);
+
+  raw.forEach(row => {
+    const label = String(row[0] || "");
+    const match = label.match(/^(\d{4})-(\d{2})-01/);
+
+    if (!match || match[1] !== "2026") return;
+
+    const m = Number(match[2]);
+    orders[m - 1] = toNumber_(row[5]); // 구매건수
+  });
+
+  return orders;
+}
+
+/**
+ * "매출내역" 시트(JP)에서 월별 주문건수를 집계합니다. getPlatformData 의
+ * monthlyOrders 계산과 동일한 로직입니다. (getTotalBusinessData 의 ordersJp
+ * 필드에서 사용)
+ */
+function getJpMonthlyOrders_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const salesSheet = requireSheet_(ss, "매출내역");
+
+  const lastRow = Math.max(salesSheet.getLastRow(), 6);
+  const rows = salesSheet.getRange(6, 2, lastRow - 5, 6).getDisplayValues();
+  const orders = new Array(12).fill(0);
+
+  rows.forEach(row => {
+    const date = row[0];
+    const rowMonth = row[1];
+
+    if (!date || date === "total" || !rowMonth) return;
+
+    const idx = parseInt(rowMonth, 10) - 1;
+    if (idx >= 0 && idx < 12) orders[idx] += toNumber_(row[4]);
+  });
+
+  return orders;
+}
+
+/**
+ * "상품별 매출" 시트(JP)의 일별 판매수량을 상품별/월별로 합산합니다.
+ * (getTotalBusinessData 의 products 필드에서 KR 라인별 수량과 합쳐 사용)
+ */
+function getJpMonthlyProductRows_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "상품별 매출");
+  const meta = getProductDailyMeta_(sheet);
+
+  const result = {};
+  for (let m = 1; m <= 12; m++) result[String(m)] = [];
+
+  if (!meta.rowCount || !meta.dateCount) return result;
+
+  const monthByCol = meta.dates.map(date => Number(date.slice(5, 7)));
+
+  const qtyValues = sheet
+    .getRange(6, 7, meta.rowCount, meta.dateCount)
+    .getValues();
+
+  const names = sheet
+    .getRange(6, 3, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(row => String(row[0] || "").trim());
+
+  const totals = {};
+  for (let m = 1; m <= 12; m++) totals[m] = {};
+
+  names.forEach((name, rowIndex) => {
+    if (!name || isAggregateRowLabel_(name)) return;
+
+    for (let c = 0; c < meta.dateCount; c++) {
+      const m = monthByCol[c];
+      if (!m || m < 1 || m > 12) continue;
+
+      const qty = Number(qtyValues[rowIndex][c] || 0);
+      if (!qty) continue;
+
+      totals[m][name] = (totals[m][name] || 0) + qty;
+    }
+  });
+
+  for (let m = 1; m <= 12; m++) {
+    result[String(m)] = Object.keys(totals[m])
+      .map(name => ({ name: name, quantity: totals[m][name] }))
+      .sort((a, b) => b.quantity - a.quantity);
+  }
+
+  return result;
 }
 
 /**
