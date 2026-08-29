@@ -1,0 +1,27 @@
+.source-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: #fff;
+  font-size: 11px;
+  text-decoration: none;
+  border-bottom: 1px solid #ffffff88;
+}
+
+.daily-table .table-wrap {
+  overflow: auto;
+}
+
+.daily-table table {
+  min-width: 1250px;
+}
+
+.daily-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.daily-table td:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

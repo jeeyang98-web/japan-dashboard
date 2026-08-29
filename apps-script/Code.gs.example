@@ -1,0 +1,33 @@
+/** Merge this API branch into the existing doGet(e), before its HtmlService return. */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.api) return serveDashboardApi_(e);
+  return HtmlService.createHtmlOutputFromFile('Index');
+}
+function serveDashboardApi_(e) {
+  var api = String(e.parameter.api || '');
+  var month = Math.max(1, Math.min(12, Number(e.parameter.month) || 8));
+  var handlers = {
+    platform: function () { return getPlatformData(month); },
+    total: function () { return getTotalBusinessData(month); },
+    krProduct: function () { return getKoreaProductData(month); },
+    krProductSales: function () { return getKoreaProductSalesData(month); },
+    krFunnel: function () { return getKoreaFunnelData(month); }
+  };
+  if (!handlers[api]) return json_({ ok: false, error: 'Unknown api: ' + api });
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = 'dashboard-api-v1:' + api + ':' + month;
+    var hit = cache.get(key);
+    if (hit) return json_({ ok: true, data: JSON.parse(hit), cached: true });
+    var data = handlers[api]();
+    var serialized = JSON.stringify(data);
+    if (serialized.length < 95000) cache.put(key, serialized, 600);
+    return json_({ ok: true, data: data, cached: false });
+  } catch (error) {
+    console.error('Dashboard API failed', api, month, error);
+    return json_({ ok: false, endpoint: api, month: month, error: String(error && error.stack || error) });
+  }
+}
+function json_(value) {
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}

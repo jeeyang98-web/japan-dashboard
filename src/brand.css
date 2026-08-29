@@ -1,0 +1,13 @@
+.brand-logo {
+  width: 179px;
+  height: 32px;
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+
+.brand-logo img {
+  display: block;
+  width: 198px;
+  max-width: none;
+  transform: translate(-9px, -27px);
+}
