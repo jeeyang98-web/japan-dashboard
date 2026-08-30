@@ -22,7 +22,8 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
     t = bundle.total || {},
     kp = bundle.krProduct || {},
     ks = bundle.krProductSales || {},
-    kf = bundle.krFunnel || {};
+    kf = bundle.krFunnel || {},
+    promo = bundle.promotion || {};
   return {
     updatedAt:
       pick(t, "updatedAt", "lastUpdated") ||
@@ -51,6 +52,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       orders: rows(pick(p, "orders", "monthlyOrders", "orderCountByMonth")),
       products: pick(p, "jpProducts", "productData", "products"),
       funnel: pick(p, "funnel", "funnelByMonth", "kpiFunnel"),
+      dailyFunnel: rows(bundle.jpFunnel),
     },
     kr: {
       monthlySales: rows(
@@ -70,7 +72,10 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       KR: pick(kp, "product", "krProduct") || kp,
       JP: pick(p, "product", "jpProduct") || {},
     },
-    promotion: pick(p, "promotion", "promotionData") || {},
+    promotion: {
+      megawariCampaigns: rows(pick(promo, "megawari", "megawariCampaigns")),
+      megapoCampaigns: rows(pick(promo, "megapo", "megapoCampaigns")),
+    },
     marketing: pick(p, "marketing") || {},
     competitor: pick(p, "competitor") || {},
     planning: pick(p, "planning") || {},

@@ -6,8 +6,10 @@ export type Series = {
     backgroundColor?: string | string[];
     borderColor?: string;
     type?: "line" | "bar";
+    yAxisID?: "y" | "y1";
   }[];
 };
+export type DailyFunnelRow = { date: string; traffic: number; cart: number; orders: number; conversionRate: number };
 export type ProductRow = { name: string; quantity: number };
 export type DashboardData = {
   updatedAt?: string;
@@ -37,6 +39,7 @@ export type DashboardData = {
     orders?: number[];
     products?: Record<string, ProductRow[]>;
     funnel?: Record<string, number>[];
+    dailyFunnel?: DailyFunnelRow[];
   };
   product?: Record<
     "TOTAL" | "KR" | "JP",
@@ -47,13 +50,8 @@ export type DashboardData = {
     }
   >;
   promotion?: {
-    productDaily?: Series;
-    megawariDaily?: Series;
-    megapoDaily?: Series;
-    megawariTotals?: Series;
-    megapoTotals?: Series;
-    megawariSummary?: Record<string, string | number>[];
-    megapoSummary?: Record<string, string | number>[];
+    megawariCampaigns?: { period: string; group: string; sales: number[] }[];
+    megapoCampaigns?: { period: string; group: string; sales: number[] }[];
   };
   marketing?: Record<string, unknown>;
   competitor?: Record<string, unknown>;
