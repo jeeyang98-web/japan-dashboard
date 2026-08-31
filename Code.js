@@ -560,11 +560,11 @@ function getTotalBusinessData(month) {
   });
 
   // squirrelfish 프론트엔드(Total 페이지)가 기대하는 KR+JP 통합 월별 배열.
-  // JP는 이 스프레드시트(손익계산서)의 "Qoo10 매출" 12개월 값을 그대로 쓰고
-  // (가장 최신/정확한 값), KR은 별도의 KR 사업 스프레드시트("월마감" 시트)에서
-  // 가져온 뒤, KR 시트에 함께 기록된 엔화→원화 환율로 JP 값을 환산합니다.
-  const jpRevenueItem = findItem("Qoo10 매출") || findItem("총매출");
-  const monthlyJpJpy = jpRevenueItem ? jpRevenueItem.months.slice() : new Array(12).fill(0);
+  // "손익계산서" 시트의 "Qoo10 매출" 라인은 마감된 달까지만 갱신되어 진행
+  // 중인 달이 비어있으므로, "매출내역" 원본 로그(G열: 매출액(엔))를 월별로
+  // 직접 합산합니다 — getPlatformData의 KPI 매출 계산과 동일한 소스/범위라
+  // JP Executive 페이지의 실매출과 항상 일치합니다.
+  const monthlyJpJpy = getJpMonthlyRevenueFromLog_();
 
   const krClose = getKrMonthlyClose_();
   const liveRate = getLiveJpyKrwRate_();
@@ -727,6 +727,51 @@ function getKrCurrentMonthLiveTotal_() {
   }
 }
 
+// B,E,H,K,M,O,Q,S,U열: 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/
+// CJ ENM/시코르 — 채널별로 "판매수량"만 있는 곳은 판매수량을, 네이버·29CM처럼
+// "주문건수"만 있는 곳은 주문건수를 그대로 구매건수 대용으로 씁니다(사용자 확인).
+var KR_DAILY_ORDER_COLS_ = [1, 4, 7, 10, 12, 14, 16, 18, 20];
+
+/**
+ * "일별매출" 시트의 일자별 로그 테이블에서 진행 중인 달의 국내 구매건수
+ * 합계를 구합니다. KR_DAILY_ORDER_COLS_에 지정된 열(판매수량 또는
+ * 주문건수, 채널마다 다름)만 골라 날짜가 이번 달인 행들에서 합산합니다.
+ */
+function getKrCurrentMonthLiveOrders_() {
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    let sheet = null;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) return 0;
+
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
+
+    let headerRow = -1;
+    for (let r = 0; r < values.length; r++) {
+      let count = 0;
+      for (let c = 0; c < values[r].length; c++) {
+        const v = String(values[r][c] || "");
+        if (v === "판매수량" || v === "주문건수") count++;
+      }
+      if (count >= 3) { headerRow = r; break; }
+    }
+    if (headerRow === -1) return 0;
+
+    const ym = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM");
+    let sum = 0;
+    for (let r = headerRow + 1; r < values.length; r++) {
+      if (String(values[r][0] || "").indexOf(ym) !== 0) continue;
+      KR_DAILY_ORDER_COLS_.forEach(function (c) { sum += toNumber_(values[r][c]); });
+    }
+    return sum;
+  } catch (err) {
+    return 0;
+  }
+}
+
 /**
  * "일별매출" 시트의 일자별 로그 테이블(구분: 자사몰/카카오/글아몰/아모레/
  * 올리브영/CJ ENM/시코르 등 "판매수량" 열이 있는 채널만 — 네이버·29CM은
@@ -882,6 +927,16 @@ function getKrMonthlyOrders_() {
     orders[m - 1] = toNumber_(row[5]); // 구매건수
   });
 
+  // 이 표는 마감된 달까지만 채워져 있어 진행 중인 달은 0으로 남습니다.
+  // "일별매출" 시트의 실시간 합계로 그 달만 보정합니다.
+  const currentMonthIndex = Number(
+    Utilities.formatDate(new Date(), "Asia/Seoul", "M")
+  ) - 1;
+  if (orders[currentMonthIndex] === 0) {
+    const live = getKrCurrentMonthLiveOrders_();
+    if (live) orders[currentMonthIndex] = live;
+  }
+
   return orders;
 }
 
@@ -920,6 +975,38 @@ function getJpMonthlyOrders_() {
  * 에서 JP 월별 목표(엔화) 12개월치를 읽어옵니다. 이전에는 대시보드 시트의
  * 선택된 달 목표 셀 하나만 읽어서 나머지 11개월이 항상 0이었습니다.
  */
+/**
+ * "매출내역" 시트의 원본 주문 로그(B열 주문일자 ~ G열 매출액(엔))를 월별로
+ * 직접 합산합니다. getPlatformData의 dailySales/monthlySummary와 동일한
+ * 범위/컬럼을 읽어서, 마감 여부와 상관없이 진행 중인 달도 실시간으로
+ * 반영됩니다.
+ */
+function getJpMonthlyRevenueFromLog_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "매출내역");
+
+  const lastRow = Math.max(sheet.getLastRow(), 6);
+  const rows = sheet.getRange(6, 2, lastRow - 5, 6).getDisplayValues(); // B:G
+
+  const totals = new Array(12).fill(0);
+
+  rows.forEach(row => {
+    const date = row[0]; // B: 주문일자
+    const monthLabel = row[1]; // C: 월 (예: "8월")
+    if (!date || date === "total" || !monthLabel) return;
+
+    const match = String(monthLabel).match(/^(\d{1,2})월/);
+    if (!match) return;
+
+    const m = Number(match[1]);
+    if (m < 1 || m > 12) return;
+
+    totals[m - 1] += toNumber_(row[5]); // G: 매출액(엔)
+  });
+
+  return totals;
+}
+
 function getJpMonthlyTargets_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = requireSheet_(ss, "매출내역");
@@ -1358,7 +1445,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v11:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v12:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
