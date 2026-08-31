@@ -23,6 +23,9 @@ import {
   buildTotals,
   buildDayColumnRows,
 } from "./data/promotionSheetData";
+import { krProductSheetUrl, krSheetData } from "./data/krSheetData";
+import { jpProductSheetUrl, jpSheetData } from "./data/jpSheetData";
+import "./promotion.css";
 import type { DashboardData, ProductRow, Series } from "./types";
 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 type Page =
