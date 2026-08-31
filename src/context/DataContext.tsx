@@ -59,6 +59,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
         pick(t, "krMonthlySales", "monthlyKr", "krSalesByMonth"),
       ),
       targets: rows(pick(t, "krTargets", "krMonthlyTargets")),
+      units: rows(pick(t, "krUnits")),
       dailyByMonth: pick(kf, "dailySales", "dailyByMonth"),
       orders: rows(pick(kf, "orders", "monthlyOrders")),
       products: pick(ks, "products", "productSalesByMonth"),
