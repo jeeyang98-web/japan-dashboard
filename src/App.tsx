@@ -196,32 +196,24 @@ function PageView({
     </section>
   );
 }
+const cumulative = (arr: number[]) =>
+  arr.reduce<number[]>((acc, v, i) => [...acc, (acc[i - 1] || 0) + v], []);
+
 function Total({ d, m }: { d: DashboardData | null; m: number }) {
   const t = d?.total,
     jpApi = d?.jp,
     rate = d?.exchangeRates?.[String(m)] || 0,
     kr = t?.monthlyKr?.[m - 1] || 0,
     jp = t?.monthlyJpKrw?.[m - 1] ?? (t?.monthlyJpJpy?.[m - 1] || 0) * rate,
-    total = kr + jp,
-    ytd =
-      (t?.monthlyKr || []).slice(0, m).reduce((a, v) => a + v, 0) +
-      (t?.monthlyJpKrw?.length
-        ? t.monthlyJpKrw.slice(0, m).reduce((a, v) => a + v, 0)
-        : (t?.monthlyJpJpy || [])
-            .slice(0, m)
-            .reduce(
-              (a, v, i) => a + v * (d?.exchangeRates?.[String(i + 1)] || 0),
-              0,
-            ));
+    total = kr + jp;
 
   const krTargets = t?.targets || [];
   // JP 목표는 현재 선택된 월 하나만 라이브 API가 채워주고 나머지 달은 0으로 옵니다
-  // (백엔드에 JP 연간 목표 시트 연동이 아직 없음) — 그만큼 통합/JP 목표 차트는 해당 월만 정확합니다.
+  // (백엔드에 JP 연간 목표 시트 연동이 아직 없음) — 그만큼 통합/JP 목표 관련 수치는 해당 월만 정확합니다.
   const jpTargetsKrw = months.map((_, i) =>
     Math.round((jpApi?.targets?.[i] || 0) * (d?.exchangeRates?.[String(i + 1)] || 0)),
   );
   const combinedTargets = krTargets.map((v, i) => v + (jpTargetsKrw[i] || 0));
-  const targetsYtd = combinedTargets.slice(0, m).reduce((a, v) => a + v, 0);
 
   const monthlyJpKrw = t?.monthlyJpKrw?.length
     ? t.monthlyJpKrw
@@ -232,98 +224,151 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     (v, i) => v + (monthlyJpKrw[i] || 0),
   );
 
-  const krProductsTop5 = (d?.kr?.products?.[String(m)] || []).slice(0, 5);
-  const jpProductsTop5 = (d?.jp?.products?.[String(m)] || []).slice(0, 5);
+  const krYtd = (t?.monthlyKr || []).slice(0, m).reduce((a, v) => a + v, 0);
+  const jpYtdKrw = monthlyJpKrw.slice(0, m).reduce((a, v) => a + v, 0);
+  const totalYtd = krYtd + jpYtdKrw;
+
+  const krCumSales = cumulative(t?.monthlyKr || []);
+  const krCumTargets = cumulative(krTargets);
+  const jpCumSalesKrw = cumulative(monthlyJpKrw);
+  const jpCumTargetsKrw = cumulative(jpTargetsKrw);
+
+  const totalProductRows = (t?.products?.[String(m)] || []).slice(0, 12);
+
+  const monthlyDetailRows = months.map((label, i) => {
+    const krTarget = krTargets[i] || 0,
+      krSales = t?.monthlyKr?.[i] || 0,
+      krRate = krTarget ? (krSales / krTarget) * 100 : 0;
+    const jpTargetJpy = jpApi?.targets?.[i] || 0,
+      jpSalesJpy = t?.monthlyJpJpy?.[i] || 0,
+      jpTargetKrw = jpTargetsKrw[i] || 0,
+      jpSalesKrw = monthlyJpKrw[i] || 0,
+      jpRate = jpTargetJpy ? (jpSalesJpy / jpTargetJpy) * 100 : 0;
+    const rowTotalTarget = combinedTargets[i] || 0,
+      rowTotalSales = combinedMonthlySales[i] || 0,
+      totalRate = rowTotalTarget ? (rowTotalSales / rowTotalTarget) * 100 : 0;
+    return {
+      월: label,
+      환율: (d?.exchangeRates?.[String(i + 1)] || 0).toFixed(2),
+      krTarget: money(krTarget),
+      krSales: money(krSales),
+      krRate,
+      jpTargetJpy: money(jpTargetJpy, "JPY"),
+      jpSalesJpy: money(jpSalesJpy, "JPY"),
+      jpTargetKrw: money(jpTargetKrw),
+      jpSalesKrw: money(jpSalesKrw),
+      jpRate,
+      totalTarget: money(rowTotalTarget),
+      totalSales: money(rowTotalSales),
+      totalRate,
+    };
+  });
 
   return (
     <>
       <section className="intro">
-        <h2>2SLASH4 Total Business Overview</h2>
-        <p>
-          국내 + 일본 전체 매출과 채널·국가별 목표 대비 실적을 한 화면에서
-          확인합니다.
-        </p>
+        <h2>KR + JP Business Overview</h2>
+        <p>JP 매출을 월별 JPY→KRW 환율(월말 기준)로 환산한 통합 실적입니다.</p>
         <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">KR 데이터</a>
         <span> · </span>
         <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">JP 데이터</a>
       </section>
       <div className="kpis">
+        <KPI label="통합 월매출" value={money(total)} note={`${m}월 · KRW`} />
+        <KPI label="통합 월목표" value={money(combinedTargets[m - 1] || 0)} note="KR + 환산 JP" />
         <KPI
-          label="전체 월매출"
-          value={money(total)}
-          note={`${m}월 기준 · KRW`}
+          label="통합 목표 달성률"
+          value={`${combinedTargets[m - 1] ? ((total / combinedTargets[m - 1]) * 100).toFixed(1) : "0.0"}%`}
         />
-        <KPI label="국내 월매출" value={money(kr)} note={`${m}월 기준 · KRW`} />
-        <KPI
-          label="일본 월매출"
-          value={money(jp)}
-          note={`JPY→KRW · rate ${rate || "—"}`}
-        />
-        <KPI
-          label="일본 비중"
-          value={`${total ? ((jp / total) * 100).toFixed(1) : "0.0"}%`}
-          note="전체 매출 내 일본 비중"
-        />
-        <KPI
-          label="YTD 전체 매출"
-          value={money(ytd)}
-          note="국내 + 일본 누적 · KRW"
-        />
-        <KPI
-          label="YTD 전체 누계 목표"
-          value={money(targetsYtd)}
-          note="선택 월까지 누계 목표"
-        />
+        <KPI label="통합 YTD 매출" value={money(totalYtd)} note="1월부터 선택 월까지" />
+        <KPI label="KR 매출 비중" value={`${total ? ((kr / total) * 100).toFixed(1) : "0.0"}%`} />
+        <KPI label="JPY/KRW 환율" value={rate.toFixed(4)} note={`${m}월 환율`} />
       </div>
       <div className="grid">
         <ChartCard
-          title="KR + JP 통합 월별 매출 vs 목표 · KRW"
+          title="월별 전체 매출 추이 · 국내 + 일본"
           series={series(months, [
-            { label: "통합 매출", data: combinedMonthlySales, color: "#5a4ff3" },
-            { label: "통합 목표", data: combinedTargets, color: "#c9c7ff" },
+            { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
+            { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
           ])}
           wide
+          stacked
         />
         <ChartCard
-          title="KR 월별 매출 vs 목표 · KRW"
+          title="YTD 월 목표 vs 실매출"
           series={series(months, [
-            { label: "KR 매출", data: t?.monthlyKr, color: "#5a4ff3" },
-            { label: "KR 목표", data: krTargets, color: "#c9c7ff" },
+            { label: "전체 목표", data: combinedTargets, color: "#dfe0e8" },
+            { label: "전체 실매출", data: combinedMonthlySales, color: "#5a4ff3" },
           ])}
-          wide
         />
         <ChartCard
-          title="JP 월별 매출 vs 목표 · 환산 KRW"
+          title="국가별 누계 목표 vs 누계 실매출"
+          kind="line"
           series={series(months, [
-            { label: "JP 환산 매출", data: monthlyJpKrw, color: "#ef4c8b" },
-            { label: "JP 환산 목표", data: jpTargetsKrw, color: "#f8bfd5" },
+            { label: "KR 누계 목표", data: krCumTargets, color: "#b7b9c4" },
+            { label: "KR 누계 실매출", data: krCumSales, color: "#5a4ff3" },
+            { label: "JP 누계 목표(KRW)", data: jpCumTargetsKrw, color: "#c9c7ff" },
+            { label: "JP 누계 실매출(KRW)", data: jpCumSalesKrw, color: "#ef4c8b" },
           ])}
-          wide
-        />
-        <ChartCard
-          title={`${m}월 채널별 매출`}
-          series={
-            t?.channels
-              ? series(
-                  Object.keys(t.channels),
-                  Object.entries(t.channels).map(([label, data], i) => ({
-                    label,
-                    data,
-                    color: ["#5a4ff3", "#ef4c8b", "#24b47e"][i % 3],
-                  })),
-                )
-              : undefined
-          }
         />
         <ChartCard
           title="월별 구매 건수 · KR + JP"
           series={series(months, [
-            { label: "KR", data: t?.ordersKr, color: "#5a4ff3" },
-            { label: "JP", data: t?.ordersJp, color: "#ef4c8b" },
+            { label: "KR 구매 건수", data: t?.ordersKr, color: "#5a4ff3" },
+            { label: "JP 구매 건수", data: t?.ordersJp, color: "#c9c7ff" },
           ])}
+          stacked
         />
-        <ChartCard title={`KR ${m}월 라인별 판매량 TOP 5`} series={productSeries(krProductsTop5)} />
-        <ChartCard title={`JP ${m}월 라인별 판매량 TOP 5`} series={productSeries(jpProductsTop5)} />
+        <ChartCard title={`${m}월 상품별 판매 수 · TOTAL`} series={productSeries(totalProductRows)} />
+        <section className="card wide detail-table">
+          <h3>월별 목표매출 · 실매출 상세</h3>
+          <p className="detail-caption">국내는 월마감 국내 합계, 일본은 매출내역 엔화 금액을 월별 JPY→KRW 환율로 환산한 값입니다.</p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th rowSpan={2}>월</th>
+                  <th rowSpan={2}>환율 JPY→KRW</th>
+                  <th colSpan={3} className="group-kr">국내 (KRW)</th>
+                  <th colSpan={5} className="group-jp">일본</th>
+                  <th colSpan={3} className="group-total">전체 (KRW)</th>
+                </tr>
+                <tr>
+                  <th className="group-kr">목표</th>
+                  <th className="group-kr">실매출</th>
+                  <th className="group-kr">달성률</th>
+                  <th className="group-jp">목표 (JPY)</th>
+                  <th className="group-jp">실매출 (JPY)</th>
+                  <th className="group-jp">목표 (KRW)</th>
+                  <th className="group-jp">실매출 (KRW)</th>
+                  <th className="group-jp">달성률</th>
+                  <th className="group-total">목표</th>
+                  <th className="group-total">실매출</th>
+                  <th className="group-total">달성률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyDetailRows.map((row) => (
+                  <tr key={row.월}>
+                    <td>{row.월}</td>
+                    <td>{row.환율}</td>
+                    <td>{row.krTarget}</td>
+                    <td>{row.krSales}</td>
+                    <td className={row.krRate >= 90 ? "rate-good" : "rate-bad"}>{row.krRate.toFixed(1)}%</td>
+                    <td>{row.jpTargetJpy}</td>
+                    <td>{row.jpSalesJpy}</td>
+                    <td>{row.jpTargetKrw}</td>
+                    <td>{row.jpSalesKrw}</td>
+                    <td className={row.jpRate >= 90 ? "rate-good" : "rate-bad"}>{row.jpRate.toFixed(1)}%</td>
+                    <td>{row.totalTarget}</td>
+                    <td>{row.totalSales}</td>
+                    <td className={row.totalRate >= 90 ? "rate-good" : "rate-bad"}>{row.totalRate.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </>
   );
