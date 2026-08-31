@@ -341,9 +341,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           ])}
         />
         <ChartCard
-          title="월별 판매수량(KR 추정) · 구매건수(JP) 추이"
+          title="월별 구매 건수 · KR + JP"
           series={series(months, [
-            { label: "KR 판매수량(추정)", data: t?.ordersKr, color: "#5a4ff3" },
+            { label: "KR 구매 건수", data: t?.ordersKr, color: "#5a4ff3" },
             { label: "JP 구매 건수", data: t?.ordersJp, color: "#c9c7ff" },
           ])}
           stacked
