@@ -963,41 +963,79 @@ function getJpMonthlyProductRows_() {
   return result;
 }
 
+var KR_PRODUCT_SHEET_GID_ = 1369904776;
+
 /**
- * KR 사업 스프레드시트의 "피봇)라인별매출" 시트(제품 라인별 월 판매수량/매출,
- * 1~7월까지 실적 반영)를 읽어옵니다. krProduct/krProductSales 공용 로직입니다.
+ * KR 사업 스프레드시트의 "상품별매출" 시트(SKU/색상별 원본 데이터, TOTAL
+ * 채널 블록 - 6행이 헤더, "합계" 행 전까지)를 읽어서 "라인명"(E열) 기준으로
+ * SKU를 통합한 월별 판매수량/매출을 반환합니다. krProduct/krProductSales/
+ * getTotalBusinessData 공용 로직입니다. 이전에는 "피봇)라인별매출" 시트를
+ * 썼는데 그 시트가 7월까지만 갱신돼 있어서 8월 이후가 항상 비어 있었습니다
+ * — 이 시트는 월 헤더가 실제로 채워진 달까지만 반영되므로 자동으로 최신
+ * 달을 따라갑니다.
  */
 function getKrLineProductRows_() {
   const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
-  const sheet = requireSheet_(ss, "피봇)라인별매출");
+  let sheet = null;
+  const sheets = ss.getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === KR_PRODUCT_SHEET_GID_) { sheet = sheets[i]; break; }
+  }
+  if (!sheet) return [];
 
-  const raw = sheet.getRange(3, 1, 18, 17).getDisplayValues();
+  const header = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const monthQtyCol = [];
+  for (let m = 1; m <= 12; m++) {
+    const label = m + "월";
+    let col = -1;
+    for (let c = 0; c < header.length; c++) {
+      if (String(header[c] || "").indexOf(label) === 0) { col = c; break; }
+    }
+    monthQtyCol.push(col);
+  }
 
-  return raw
-    .filter(row => row[0])
-    .map(row => {
-      const monthly = [];
+  // "TOTAL" 채널 블록은 7행부터 시작해서, B열에 "합계"라고 적힌 소계 행
+  // 바로 앞에서 끝납니다 (그 아래부터는 채널별 블록이 별도로 이어짐).
+  const colB = sheet.getRange(7, 2, sheet.getLastRow() - 6, 1).getDisplayValues();
+  let endRow = 6 + colB.length;
+  for (let i = 0; i < colB.length; i++) {
+    if (String(colB[i][0] || "").indexOf("합계") !== -1) { endRow = 7 + i - 1; break; }
+  }
 
-      for (let m = 1; m <= 12; m++) {
-        if (m <= 7) {
-          const qtyIdx = 1 + (m - 1) * 2;
-          const revIdx = 2 + (m - 1) * 2;
-          monthly.push({
-            quantity: toNumber_(row[qtyIdx]),
-            revenue: toNumber_(row[revIdx])
-          });
-        } else {
-          monthly.push({ quantity: 0, revenue: 0 });
-        }
-      }
+  const numRows = endRow - 7 + 1;
+  if (numRows <= 0) return [];
+  const data = sheet.getRange(7, 1, numRows, sheet.getLastColumn()).getDisplayValues();
 
-      return {
-        name: String(row[0]).trim(),
-        monthly: monthly,
-        totalQuantity: toNumber_(row[15]),
-        totalRevenue: toNumber_(row[16])
+  const byName = {};
+  const order = [];
+
+  data.forEach(function (row) {
+    const name = String(row[4] || "").trim(); // E열: 라인명
+    if (!name) return;
+
+    if (!byName[name]) {
+      byName[name] = {
+        name: name,
+        monthly: Array.from({ length: 12 }, function () { return { quantity: 0, revenue: 0 }; }),
+        totalQuantity: 0,
+        totalRevenue: 0
       };
-    });
+      order.push(name);
+    }
+
+    const entry = byName[name];
+    entry.totalQuantity += toNumber_(row[6]); // 수량 (EA)
+    entry.totalRevenue += toNumber_(row[7]); // 매출(원)
+
+    for (let m = 1; m <= 12; m++) {
+      const col = monthQtyCol[m - 1];
+      if (col === -1) continue;
+      entry.monthly[m - 1].quantity += toNumber_(row[col]);
+      entry.monthly[m - 1].revenue += toNumber_(row[col + 1]);
+    }
+  });
+
+  return order.map(function (name) { return byName[name]; });
 }
 
 /**
@@ -1277,7 +1315,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v8:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v9:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
