@@ -201,6 +201,7 @@ const cumulative = (arr: number[]) =>
   arr.reduce<number[]>((acc, v, i) => [...acc, (acc[i - 1] || 0) + v], []);
 
 function Total({ d, m }: { d: DashboardData | null; m: number }) {
+  const [trendMarket, setTrendMarket] = useState<"ALL" | "KR" | "JP">("ALL");
   const t = d?.total,
     jpApi = d?.jp,
     rate = d?.exchangeRates?.[String(m)] || 0,
@@ -289,13 +290,38 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
       </div>
       <div className="grid">
         <ChartCard
-          title="월별 전체 매출 추이 · 국내 + 일본"
-          series={series(months, [
-            { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
-            { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
-          ])}
+          title={
+            trendMarket === "ALL"
+              ? "월별 전체 매출 추이 · 국내 + 일본"
+              : trendMarket === "KR"
+                ? "월별 매출 추이 · 국내"
+                : "월별 매출 추이 · 일본"
+          }
+          series={
+            trendMarket === "KR"
+              ? series(months, [{ label: "국내", data: t?.monthlyKr, color: "#5a4ff3" }])
+              : trendMarket === "JP"
+                ? series(months, [{ label: "일본", data: monthlyJpKrw, color: "#ef4c8b" }])
+                : series(months, [
+                    { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
+                    { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
+                  ])
+          }
           wide
-          stacked
+          stacked={trendMarket === "ALL"}
+          actions={
+            <div className="mini-tabs">
+              {(["ALL", "KR", "JP"] as const).map((v) => (
+                <button
+                  key={v}
+                  className={trendMarket === v ? "active" : ""}
+                  onClick={() => setTrendMarket(v)}
+                >
+                  {v === "ALL" ? "전체" : v}
+                </button>
+              ))}
+            </div>
+          }
         />
         <ChartCard
           title="YTD 월 목표 vs 실매출"
