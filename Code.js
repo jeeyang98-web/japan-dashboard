@@ -916,6 +916,12 @@ function getJpMonthlyOrders_() {
  * "상품별 매출" 시트(JP)의 일별 판매수량을 상품별/월별로 합산합니다.
  * (getTotalBusinessData 의 products 필드에서 KR 라인별 수량과 합쳐 사용)
  */
+/**
+ * "상품별 매출" 시트의 "라인"(B열)은 각 라인의 첫 SKU 행에만 채워져 있고
+ * (색상별 하위 행은 병합된 것처럼 공란) 나머지 행은 공란이므로, 위에서부터
+ * 마지막으로 채워진 라인명을 그대로 이어받는(forward-fill) 방식으로 각
+ * SKU 행의 실제 라인명을 복원합니다.
+ */
 function getJpMonthlyProductRows_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = requireSheet_(ss, "상품별 매출");
@@ -937,11 +943,24 @@ function getJpMonthlyProductRows_() {
     .getDisplayValues()
     .map(row => String(row[0] || "").trim());
 
+  const lineLabels = sheet
+    .getRange(6, 2, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(row => String(row[0] || "").trim());
+
+  let lastLine = "";
+  const lines = lineLabels.map((label, i) => {
+    if (label) lastLine = label;
+    return lastLine || names[i];
+  });
+
   const totals = {};
   for (let m = 1; m <= 12; m++) totals[m] = {};
 
   names.forEach((name, rowIndex) => {
     if (!name || isAggregateRowLabel_(name)) return;
+    const line = lines[rowIndex];
+    if (!line || isAggregateRowLabel_(line)) return;
 
     for (let c = 0; c < meta.dateCount; c++) {
       const m = monthByCol[c];
@@ -950,7 +969,7 @@ function getJpMonthlyProductRows_() {
       const qty = Number(qtyValues[rowIndex][c] || 0);
       if (!qty) continue;
 
-      totals[m][name] = (totals[m][name] || 0) + qty;
+      totals[m][line] = (totals[m][line] || 0) + qty;
     }
   });
 
@@ -1315,7 +1334,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v9:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v10:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
