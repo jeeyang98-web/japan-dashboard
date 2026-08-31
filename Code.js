@@ -218,8 +218,7 @@ function getPlatformData(selectedMonth) {
     };
   });
 
-  const targets = new Array(12).fill(0);
-  targets[month - 1] = kpi.target;
+  const targets = getJpMonthlyTargets_();
 
   // squirrelfish JP Executive 페이지의 "상품별 매출" 차트가 기대하는
   // 월별 상품 랭킹(Record<month, {name, quantity}[]>). "상품별 매출" 시트의
@@ -917,6 +916,30 @@ function getJpMonthlyOrders_() {
  * (getTotalBusinessData 의 products 필드에서 KR 라인별 수량과 합쳐 사용)
  */
 /**
+ * "매출내역" 시트 오른쪽의 작은 요약표(K열: "N월" 라벨, M열: "월매출 목표")
+ * 에서 JP 월별 목표(엔화) 12개월치를 읽어옵니다. 이전에는 대시보드 시트의
+ * 선택된 달 목표 셀 하나만 읽어서 나머지 11개월이 항상 0이었습니다.
+ */
+function getJpMonthlyTargets_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "매출내역");
+
+  const raw = sheet.getRange(6, 11, 12, 3).getDisplayValues(); // K:M, 12 rows
+  const targets = new Array(12).fill(0);
+
+  raw.forEach(row => {
+    const label = String(row[0] || ""); // K열: "1월".."12월"
+    const match = label.match(/^(\d{1,2})월/);
+    if (!match) return;
+    const m = Number(match[1]);
+    if (m < 1 || m > 12) return;
+    targets[m - 1] = toNumber_(row[2]); // M열: 월매출 목표
+  });
+
+  return targets;
+}
+
+/**
  * "상품별 매출" 시트의 "라인"(B열)은 각 라인의 첫 SKU 행에만 채워져 있고
  * (색상별 하위 행은 병합된 것처럼 공란) 나머지 행은 공란이므로, 위에서부터
  * 마지막으로 채워진 라인명을 그대로 이어받는(forward-fill) 방식으로 각
@@ -1322,7 +1345,8 @@ function serveDashboardApi_(e) {
 
     jpFunnel: function () {
       return getJpDailyFunnel_();
-    }
+    },
+
   };
 
   if (!handlers[api]) {
@@ -1334,7 +1358,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v10:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v11:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
