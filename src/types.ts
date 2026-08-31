@@ -27,6 +27,7 @@ export type DashboardData = {
   kr?: {
     monthlySales: number[];
     targets: number[];
+    units?: number[];
     dailyByMonth?: Record<string, Series>;
     orders?: number[];
     products?: Record<string, ProductRow[]>;

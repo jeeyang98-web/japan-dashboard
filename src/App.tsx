@@ -17,13 +17,14 @@ import {
 import { ChartCard, DataTable, KPI, money } from "./components";
 import { useDashboard } from "./context/DataContext";
 import {
+  promotionSheetUrl,
   megawariCampaigns,
   megapoCampaigns,
   buildDailySeries,
   buildTotals,
   buildDayColumnRows,
 } from "./data/promotionSheetData";
-import { krProductSheetUrl, krSheetData, krSheetUrl } from "./data/krSheetData";
+import { krDailySheetUrl, krProductSheetUrl, krSheetData, krSheetUrl } from "./data/krSheetData";
 import { jpProductSheetUrl, jpSheetData, jpSheetUrl } from "./data/jpSheetData";
 import "./promotion.css";
 import type { DashboardData, ProductRow, Series } from "./types";
@@ -272,6 +273,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">KR 데이터</a>
         <span> · </span>
         <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">JP 데이터</a>
+        <span> · </span>
+        <a className="source-link" href="https://share.google/kB3LrSbGm3er9v5vB" target="_blank" rel="noreferrer">JPY/KRW 환율</a>
       </section>
       <div className="kpis">
         <KPI label="통합 월매출" value={money(total)} note={`${m}월 · KRW`} />
@@ -391,7 +394,25 @@ function Executive({
   d: DashboardData | null;
   m: number;
 }) {
-  const x = market === "JP" ? d?.jp : d?.kr,
+  const source = market === "JP" ? d?.jp : d?.kr;
+  const x = market === "KR"
+    ? {
+        ...source,
+        monthlySales: source?.monthlySales?.some(Boolean) ? source.monthlySales : krSheetData.monthlySales,
+        targets: source?.targets?.some(Boolean) ? source.targets : krSheetData.targets,
+        units: source?.units?.some(Boolean) ? source.units : krSheetData.units,
+        dailyByMonth: source?.dailyByMonth && Object.keys(source.dailyByMonth).length ? source.dailyByMonth : krSheetData.dailyByMonth,
+        products: source?.products && Object.keys(source.products).length ? source.products : krSheetData.lineQuantityProducts,
+      }
+    : {
+        ...source,
+        monthlySales: source?.monthlySales?.some(Boolean) ? source.monthlySales : jpSheetData.monthlySales,
+        targets: source?.targets?.some(Boolean) ? source.targets : jpSheetData.targets,
+        orders: source?.orders?.some(Boolean) ? source.orders : jpSheetData.orders,
+        dailyByMonth: source?.dailyByMonth && Object.keys(source.dailyByMonth).length ? source.dailyByMonth : jpSheetData.dailyByMonth,
+        products: source?.products && Object.keys(source.products).length ? source.products : jpSheetData.products,
+        funnel: source?.funnel?.some((item) => Object.keys(item || {}).length) ? source.funnel : jpSheetData.funnel,
+      },
     sales = x?.monthlySales?.[m - 1] || 0,
     target = x?.targets?.[m - 1] || 0,
     c = market === "JP" ? "JPY" : "KRW",
@@ -439,9 +460,33 @@ function Executive({
       <section className="intro">
         <h2>{market === "JP" ? "Japan" : "Korea"} Business Overview</h2>
         <p>매출·전환·상품 성과를 한 화면에서 확인합니다.</p>
+        {market === "KR" && (
+          <>
+            <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">마감 데이터 · 월마감</a>
+            <span> · </span>
+            <a className="source-link" href={krDailySheetUrl} target="_blank" rel="noreferrer">당월 데이터 · 일별매출</a>
+            <span> · </span>
+            <a className="source-link" href={krProductSheetUrl} target="_blank" rel="noreferrer">상품 데이터</a>
+          </>
+        )}
+        {market === "JP" && (
+          <>
+            <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">
+              매출 데이터 · 매출 대시보드
+            </a>
+            <span> · </span>
+            <a className="source-link" href={jpProductSheetUrl} target="_blank" rel="noreferrer">
+              라인별 판매량 · 상품별 매출
+            </a>
+          </>
+        )}
       </section>
       <div className={`kpis${market === "JP" ? " grid-4" : ""}`}>
-        <KPI label="월 매출" value={money(sales, c)} note={`${m}월 기준`} />
+        <KPI
+          label="월 매출"
+          value={money(sales, c)}
+          note={market === "KR" && m === 8 ? `8월 누계 · ${krSheetData.latestDailyDate} 기준` : `${m}월 기준`}
+        />
         <KPI label="월 목표" value={money(target, c)} />
         <KPI
           label="목표 달성률"
@@ -451,8 +496,8 @@ function Executive({
           <KPI label="일 평균매출" value={money(dailyAvg, c)} note={`${daysInMonth}일 기준`} />
         ) : (
           <KPI
-            label="주문건수"
-            value={(x?.orders?.[m - 1] || 0).toLocaleString()}
+            label="판매수량"
+            value={(x?.units?.[m - 1] || 0).toLocaleString()}
           />
         )}
         {market === "JP" && (
@@ -485,7 +530,7 @@ function Executive({
           kind="line"
         />
         <ChartCard
-          title="상품별 매출"
+          title="라인별 판매량 TOP 5"
           series={productSeries(x?.products?.[String(m)])}
         />
         <ChartCard
@@ -678,6 +723,9 @@ function Promotion({ d }: { d: DashboardData | null }) {
         <p>
           상품/기간별 판매 흐름과 MEGAWARI · MEGAPO 전체 성과를 함께 확인합니다.
         </p>
+        <a className="source-link" href={promotionSheetUrl} target="_blank" rel="noreferrer">
+          데이터 소스 · 프로모션별 매출내역
+        </a>
       </section>
       <div className="grid">
         <ChartCard
