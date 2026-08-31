@@ -682,11 +682,56 @@ function getLiveJpyKrwRate_() {
   return rate;
 }
 
+var KR_DAILY_SHEET_GID_ = 707880508;
+
+/**
+ * "일별매출" 시트에서 진행 중인 달의 실시간 국내 매출 누계를 읽어옵니다.
+ * 이 시트는 담당자가 매달 손으로 다시 구성해서 채널 열 순서/개수가 달마다
+ * 바뀌고, 개별 채널 값 사이사이에 소계(국내 합계·일본 합계·전체 합계)
+ * 셀이 섞여 있어 행을 통째로 합산하면 이중 계산됩니다. 그래서 직접
+ * 합산하지 않고, "당월 누계" 행과 그 위 "국내 합계" 라벨이 붙은 열을
+ * 라벨 기준으로 찾아 시트가 이미 계산해 둔 소계 값을 그대로 읽습니다
+ * (올리브영 SELL-IN처럼 "국내 합계"에서 의도적으로 빠지는 항목이 있어
+ * 직접 재계산하면 값이 달라짐 — 실측 확인함).
+ */
+function getKrCurrentMonthLiveTotal_() {
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    let sheet = null;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) return 0;
+
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
+
+    let totalRow = -1;
+    for (let r = 0; r < values.length; r++) {
+      if (String(values[r][0] || "").indexOf("당월 누계") !== -1) totalRow = r;
+    }
+    if (totalRow === -1) return 0;
+
+    let domesticCol = -1;
+    for (let r = totalRow; r >= 0 && r >= totalRow - 5 && domesticCol === -1; r--) {
+      const row = values[r];
+      for (let c = 1; c < row.length; c++) {
+        if (String(row[c] || "").indexOf("국내 합계") !== -1) { domesticCol = c; break; }
+      }
+    }
+    if (domesticCol === -1) return 0;
+
+    return toNumber_(values[totalRow][domesticCol]);
+  } catch (err) {
+    return 0;
+  }
+}
+
 /**
  * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
  * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
- * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있고
- * (예: 8월 이후는 0/공백), 이는 실제 데이터 상태이므로 그대로 반환합니다.
+ * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있어
+ * (예: 진행 중인 달은 0), 그 달만 "일별매출" 시트의 실시간 누계로 보정합니다.
  */
 function getKrMonthlyClose_() {
   const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
@@ -712,6 +757,17 @@ function getKrMonthlyClose_() {
     krTargets.push(toNumber_((targetColumn[i] || [])[0]));
     monthlyJpQoo10Krw.push(jpKrw);
     monthlyJpOtherKrw.push(toNumber_(row[8])); // col34
+  }
+
+  // 진행 중인 이번 달은 "월마감"에 아직 0으로 남아있으므로, "일별매출" 시트의
+  // "당월 누계" 실시간 합계로 대체합니다. 이미 마감된 과거 달/아직 시작 안 한
+  // 미래 달은 건드리지 않습니다.
+  const currentMonthIndex = Number(
+    Utilities.formatDate(new Date(), "Asia/Seoul", "M")
+  ) - 1;
+  if (monthlyKr[currentMonthIndex] === 0) {
+    const live = getKrCurrentMonthLiveTotal_();
+    if (live) monthlyKr[currentMonthIndex] = live;
   }
 
   return {
@@ -1172,7 +1228,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v5:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v7:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
