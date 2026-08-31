@@ -728,14 +728,18 @@ function getKrCurrentMonthLiveTotal_() {
 }
 
 // B,E,H,K,M,O,Q,S,U열: 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/
-// CJ ENM/시코르 — 채널별로 "판매수량"만 있는 곳은 판매수량을, 네이버·29CM처럼
-// "주문건수"만 있는 곳은 주문건수를 그대로 구매건수 대용으로 씁니다(사용자 확인).
+// CJ ENM/시코르. 이 시트엔 네이버·29CM만 진짜 "주문건수"가 있고 나머지
+// 7개 채널(자사몰 포함)은 "판매수량"(판매 개수)만 있어서, 둘을 그대로
+// 더하면 "주문 건수"가 아니라 "판매수량 + 일부 채널 주문수"가 섞인
+// 추정치가 됩니다. 이 사실을 알고도 프론트엔드에서 "KR 판매수량(추정)"
+// 이라는 정직한 라벨로 그대로 쓰기로 확정함(사용자 확인, 정확한 국내
+// 전체 주문건수 집계 데이터는 시트에 존재하지 않음).
 var KR_DAILY_ORDER_COLS_ = [1, 4, 7, 10, 12, 14, 16, 18, 20];
 
 /**
- * "일별매출" 시트의 일자별 로그 테이블에서 진행 중인 달의 국내 구매건수
- * 합계를 구합니다. KR_DAILY_ORDER_COLS_에 지정된 열(판매수량 또는
- * 주문건수, 채널마다 다름)만 골라 날짜가 이번 달인 행들에서 합산합니다.
+ * "일별매출" 시트의 일자별 로그 테이블에서 진행 중인 달의 KR_DAILY_ORDER_COLS_
+ * 합계(판매수량+일부 주문건수 추정치)를 구합니다. 프론트엔드에서는 "구매건수"가
+ * 아니라 "판매수량(추정)"으로 표시합니다 — 위 주석 참고.
  */
 function getKrCurrentMonthLiveOrders_() {
   try {
@@ -908,7 +912,10 @@ function getKrChannelRevenue_() {
 
 /**
  * "월마감" 시트의 자사몰 방문/구매 섹션(getKoreaFunnelData 와 동일한 범위)에서
- * 월별 국내 주문건수만 뽑아옵니다. (getTotalBusinessData 의 ordersKr 필드에서 사용)
+ * 월별 자사몰 주문건수를 뽑아오고, 진행 중인 달은 getKrCurrentMonthLiveOrders_
+ * 의 판매수량(추정) 합계로 보정합니다. (getTotalBusinessData 의 ordersKr 필드,
+ * 프론트엔드에는 "KR 판매수량(추정)"으로 표시됨 — 실제 국내 전체 주문건수
+ * 아님, KR_DAILY_ORDER_COLS_ 주석 참고)
  */
 function getKrMonthlyOrders_() {
   const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
