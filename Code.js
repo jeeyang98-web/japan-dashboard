@@ -1152,6 +1152,14 @@ function serveDashboardApi_(e) {
 
     krFunnel: function () {
       return getKoreaFunnelData(month);
+    },
+
+    promotion: function () {
+      return getPromotionData_();
+    },
+
+    jpFunnel: function () {
+      return getJpDailyFunnel_();
     }
   };
 
@@ -1164,7 +1172,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v4:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v5:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
@@ -1196,6 +1204,100 @@ function serveDashboardApi_(e) {
       error: String(error && error.stack ? error.stack : error)
     });
   }
+}
+
+var PROMOTION_TAB_GID_ = 1878315571;
+var JP_DAILY_FUNNEL_GID_ = 1605116142;
+
+function getJpDailyFunnel_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = null;
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === JP_DAILY_FUNNEL_GID_) { sheet = sheets[i]; break; }
+  }
+  if (!sheet) throw new Error("JP daily funnel tab (gid " + JP_DAILY_FUNNEL_GID_ + ") not found");
+
+  var values = sheet.getDataRange().getValues();
+  var headerRow = -1;
+  for (var r = 0; r < values.length; r++) {
+    if (values[r].indexOf("날짜") !== -1 && values[r].indexOf("유입자수") !== -1) { headerRow = r; break; }
+  }
+  if (headerRow === -1) return [];
+
+  var header = values[headerRow];
+  var dateCol = header.indexOf("날짜");
+  var trafficCol = header.indexOf("유입자수");
+  var cartCol = header.indexOf("장바구니");
+  var ordersCol = header.indexOf("주문완료");
+  var rateCol = header.indexOf("주문전환율(%)");
+
+  var out = [];
+  for (var row = headerRow + 1; row < values.length; row++) {
+    var dateVal = values[row][dateCol];
+    if (!dateVal) continue;
+    var date = Object.prototype.toString.call(dateVal) === "[object Date]"
+      ? Utilities.formatDate(dateVal, Session.getScriptTimeZone(), "yyyy-MM-dd")
+      : String(dateVal);
+    out.push({
+      date: date,
+      traffic: Number(values[row][trafficCol]) || 0,
+      cart: Number(values[row][cartCol]) || 0,
+      orders: Number(values[row][ordersCol]) || 0,
+      conversionRate: Number(values[row][rateCol]) || 0
+    });
+  }
+  return out;
+}
+
+function getPromotionData_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = null;
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === PROMOTION_TAB_GID_) { sheet = sheets[i]; break; }
+  }
+  if (!sheet) throw new Error("Promotion tab (gid " + PROMOTION_TAB_GID_ + ") not found");
+
+  var range = sheet.getDataRange();
+  var values = range.getValues();
+  var formats = range.getNumberFormats();
+  return {
+    megawari: extractCampaignTable_(values, formats, "MEGAWARI", "분기"),
+    megapo: extractCampaignTable_(values, formats, "MEGAPO", "월")
+  };
+}
+
+function extractCampaignTable_(values, formats, headerLabel, groupLabel) {
+  var headerRow = -1;
+  for (var r = 0; r < values.length; r++) {
+    if (values[r][0] === headerLabel && values[r][1] === groupLabel) { headerRow = r; break; }
+  }
+  if (headerRow === -1) return [];
+
+  var header = values[headerRow];
+  var dayCols = [];
+  for (var c = 2; c < header.length; c++) {
+    if (String(header[c]).indexOf("day") === 0) dayCols.push(c);
+    else break;
+  }
+
+  var campaigns = [];
+  for (var row = headerRow + 1; row < values.length; row++) {
+    var period = values[row][0];
+    var group = values[row][1];
+    if (!period || !group) break;
+    var sales = [];
+    for (var i = 0; i < dayCols.length; i++) {
+      var col = dayCols[i];
+      var v = values[row][col];
+      var fmt = (formats[row] && formats[row][col]) || "";
+      if (v === "" || v === null || typeof v !== "number" || fmt.indexOf("%") !== -1) break;
+      sales.push(v);
+    }
+    if (sales.length > 0) campaigns.push({ period: String(period), group: String(group), sales: sales });
+  }
+  return campaigns;
 }
 
 function dashboardJson_(value) {
