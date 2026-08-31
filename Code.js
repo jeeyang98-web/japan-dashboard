@@ -728,20 +728,20 @@ function getKrCurrentMonthLiveTotal_() {
 }
 
 // B,E,H,K,M,O,Q,S,U열: 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/
-// CJ ENM/시코르. 이 시트엔 네이버·29CM만 진짜 "주문건수"가 있고 나머지
-// 7개 채널(자사몰 포함)은 "판매수량"(판매 개수)만 있어서, 둘을 그대로
-// 더하면 "주문 건수"가 아니라 "판매수량 + 일부 채널 주문수"가 섞인
-// 추정치가 됩니다. 이 사실을 알고도 프론트엔드에서 "KR 판매수량(추정)"
-// 이라는 정직한 라벨로 그대로 쓰기로 확정함(사용자 확인, 정확한 국내
-// 전체 주문건수 집계 데이터는 시트에 존재하지 않음).
+// CJ ENM/시코르. 네이버·29CM은 "주문건수"를, 나머지 채널은 "판매수량"을
+// 그대로 구매건수로 취급합니다(사용자 확인 — 판매수량을 주문건수와
+// 동일하게 봄).
 var KR_DAILY_ORDER_COLS_ = [1, 4, 7, 10, 12, 14, 16, 18, 20];
 
 /**
- * "일별매출" 시트의 일자별 로그 테이블에서 진행 중인 달의 KR_DAILY_ORDER_COLS_
- * 합계(판매수량+일부 주문건수 추정치)를 구합니다. 프론트엔드에서는 "구매건수"가
- * 아니라 "판매수량(추정)"으로 표시합니다 — 위 주석 참고.
+ * "일별매출" 시트의 일자별 로그 테이블(1월 1일부터 매일 한 행씩 있는 원본
+ * 데이터, 23행부터 시작)을 KR_DAILY_ORDER_COLS_ 기준으로 월별로 합산해서
+ * 12개월치 국내 구매건수를 구합니다. "월마감" 같은 별도 마감 요약표와
+ * 달리 이 로그는 매일 실시간으로 쌓이기 때문에, 마감 여부와 상관없이
+ * 1월부터 오늘까지 전부 반영됩니다.
  */
-function getKrCurrentMonthLiveOrders_() {
+function getKrMonthlyOrdersFromDailyLog_() {
+  const totals = new Array(12).fill(0);
   try {
     const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
     let sheet = null;
@@ -749,7 +749,7 @@ function getKrCurrentMonthLiveOrders_() {
     for (let i = 0; i < sheets.length; i++) {
       if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
     }
-    if (!sheet) return 0;
+    if (!sheet) return totals;
 
     const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
 
@@ -762,59 +762,19 @@ function getKrCurrentMonthLiveOrders_() {
       }
       if (count >= 3) { headerRow = r; break; }
     }
-    if (headerRow === -1) return 0;
+    if (headerRow === -1) return totals;
 
-    const ym = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM");
-    let sum = 0;
     for (let r = headerRow + 1; r < values.length; r++) {
-      if (String(values[r][0] || "").indexOf(ym) !== 0) continue;
-      KR_DAILY_ORDER_COLS_.forEach(function (c) { sum += toNumber_(values[r][c]); });
+      const date = String(values[r][0] || "");
+      const match = date.match(/^\d{4}-(\d{2})-\d{2}/);
+      if (!match) continue;
+      const m = Number(match[1]);
+      if (m < 1 || m > 12) continue;
+      KR_DAILY_ORDER_COLS_.forEach(function (c) { totals[m - 1] += toNumber_(values[r][c]); });
     }
-    return sum;
+    return totals;
   } catch (err) {
-    return 0;
-  }
-}
-
-/**
- * "일별매출" 시트의 일자별 로그 테이블(구분: 자사몰/카카오/글아몰/아모레/
- * 올리브영/CJ ENM/시코르 등 "판매수량" 열이 있는 채널만 — 네이버·29CM은
- * "주문건수"만 집계돼 있어 제외)에서 진행 중인 달의 판매수량 합계를
- * 구합니다. "판매수량" 라벨이 3개 이상 나오는 행을 헤더로 보고 그 열들만
- * 골라, 날짜가 이번 달인 행들에서 합산합니다.
- */
-function getKrCurrentMonthLiveUnits_() {
-  try {
-    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
-    let sheet = null;
-    const sheets = ss.getSheets();
-    for (let i = 0; i < sheets.length; i++) {
-      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
-    }
-    if (!sheet) return 0;
-
-    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
-
-    let headerRow = -1;
-    let qtyCols = [];
-    for (let r = 0; r < values.length; r++) {
-      const cols = [];
-      for (let c = 0; c < values[r].length; c++) {
-        if (String(values[r][c] || "") === "판매수량") cols.push(c);
-      }
-      if (cols.length >= 3) { headerRow = r; qtyCols = cols; break; }
-    }
-    if (headerRow === -1) return 0;
-
-    const ym = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM");
-    let sum = 0;
-    for (let r = headerRow + 1; r < values.length; r++) {
-      if (String(values[r][0] || "").indexOf(ym) !== 0) continue;
-      qtyCols.forEach(function (c) { sum += toNumber_(values[r][c]); });
-    }
-    return sum;
-  } catch (err) {
-    return 0;
+    return totals;
   }
 }
 
@@ -861,10 +821,9 @@ function getKrMonthlyClose_() {
     if (live) monthlyKr[currentMonthIndex] = live;
   }
 
-  // "월마감" 시트에는 판매수량 자체가 없어서, 진행 중인 이번 달만 "일별매출"
-  // 시트에서 실시간으로 채웁니다. 다른 달은 알 수 없어 0으로 둡니다.
-  const krUnits = new Array(12).fill(0);
-  krUnits[currentMonthIndex] = getKrCurrentMonthLiveUnits_();
+  // "월마감" 시트에는 판매수량 자체가 없어서, "일별매출" 시트의 1월부터의
+  // 일자별 로그를 월별로 합산해 12개월 전체를 채웁니다.
+  const krUnits = getKrMonthlyOrdersFromDailyLog_();
 
   return {
     monthlyKr: monthlyKr,
@@ -911,40 +870,14 @@ function getKrChannelRevenue_() {
 }
 
 /**
- * "월마감" 시트의 자사몰 방문/구매 섹션(getKoreaFunnelData 와 동일한 범위)에서
- * 월별 자사몰 주문건수를 뽑아오고, 진행 중인 달은 getKrCurrentMonthLiveOrders_
- * 의 판매수량(추정) 합계로 보정합니다. (getTotalBusinessData 의 ordersKr 필드,
- * 프론트엔드에는 "KR 판매수량(추정)"으로 표시됨 — 실제 국내 전체 주문건수
- * 아님, KR_DAILY_ORDER_COLS_ 주석 참고)
+ * 월별 국내 구매건수. (getTotalBusinessData 의 ordersKr 필드에서 사용,
+ * 프론트엔드에는 JP와 동일하게 "구매 건수"로 표시됨)
+ * "월마감" 시트의 자사몰 방문/구매 섹션은 3월 이후로 갱신이 끊겨서 더 이상
+ * 쓰지 않고, "일별매출" 시트의 1월부터의 일자별 로그를 그대로 씁니다 —
+ * 마감 여부와 무관하게 항상 최신입니다.
  */
 function getKrMonthlyOrders_() {
-  const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
-  const sheet = requireSheet_(ss, "월마감");
-
-  const raw = sheet.getRange(72, 1, 39, 10).getDisplayValues();
-  const orders = new Array(12).fill(0);
-
-  raw.forEach(row => {
-    const label = String(row[0] || "");
-    const match = label.match(/^(\d{4})-(\d{2})-01/);
-
-    if (!match || match[1] !== "2026") return;
-
-    const m = Number(match[2]);
-    orders[m - 1] = toNumber_(row[5]); // 구매건수
-  });
-
-  // 이 표는 마감된 달까지만 채워져 있어 진행 중인 달은 0으로 남습니다.
-  // "일별매출" 시트의 실시간 합계로 그 달만 보정합니다.
-  const currentMonthIndex = Number(
-    Utilities.formatDate(new Date(), "Asia/Seoul", "M")
-  ) - 1;
-  if (orders[currentMonthIndex] === 0) {
-    const live = getKrCurrentMonthLiveOrders_();
-    if (live) orders[currentMonthIndex] = live;
-  }
-
-  return orders;
+  return getKrMonthlyOrdersFromDailyLog_();
 }
 
 /**
@@ -1452,7 +1385,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v12:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v13:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
