@@ -632,6 +632,7 @@ function getTotalBusinessData(month) {
     exchangeRates: exchangeRates,
     krTargets: krClose.krTargets,
     targets: krClose.krTargets,
+    krUnits: krClose.krUnits,
     channels: channels,
     ordersKr: ordersKr,
     ordersJp: ordersJp,
@@ -728,6 +729,48 @@ function getKrCurrentMonthLiveTotal_() {
 }
 
 /**
+ * "일별매출" 시트의 일자별 로그 테이블(구분: 자사몰/카카오/글아몰/아모레/
+ * 올리브영/CJ ENM/시코르 등 "판매수량" 열이 있는 채널만 — 네이버·29CM은
+ * "주문건수"만 집계돼 있어 제외)에서 진행 중인 달의 판매수량 합계를
+ * 구합니다. "판매수량" 라벨이 3개 이상 나오는 행을 헤더로 보고 그 열들만
+ * 골라, 날짜가 이번 달인 행들에서 합산합니다.
+ */
+function getKrCurrentMonthLiveUnits_() {
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    let sheet = null;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) return 0;
+
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
+
+    let headerRow = -1;
+    let qtyCols = [];
+    for (let r = 0; r < values.length; r++) {
+      const cols = [];
+      for (let c = 0; c < values[r].length; c++) {
+        if (String(values[r][c] || "") === "판매수량") cols.push(c);
+      }
+      if (cols.length >= 3) { headerRow = r; qtyCols = cols; break; }
+    }
+    if (headerRow === -1) return 0;
+
+    const ym = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM");
+    let sum = 0;
+    for (let r = headerRow + 1; r < values.length; r++) {
+      if (String(values[r][0] || "").indexOf(ym) !== 0) continue;
+      qtyCols.forEach(function (c) { sum += toNumber_(values[r][c]); });
+    }
+    return sum;
+  } catch (err) {
+    return 0;
+  }
+}
+
+/**
  * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
  * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
  * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있어
@@ -770,10 +813,16 @@ function getKrMonthlyClose_() {
     if (live) monthlyKr[currentMonthIndex] = live;
   }
 
+  // "월마감" 시트에는 판매수량 자체가 없어서, 진행 중인 이번 달만 "일별매출"
+  // 시트에서 실시간으로 채웁니다. 다른 달은 알 수 없어 0으로 둡니다.
+  const krUnits = new Array(12).fill(0);
+  krUnits[currentMonthIndex] = getKrCurrentMonthLiveUnits_();
+
   return {
     monthlyKr: monthlyKr,
     impliedRate: impliedRate,
     krTargets: krTargets,
+    krUnits: krUnits,
     monthlyJpQoo10Krw: monthlyJpQoo10Krw,
     monthlyJpOtherKrw: monthlyJpOtherKrw
   };
@@ -1228,7 +1277,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v7:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v8:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
