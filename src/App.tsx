@@ -23,8 +23,8 @@ import {
   buildTotals,
   buildDayColumnRows,
 } from "./data/promotionSheetData";
-import { krProductSheetUrl, krSheetData } from "./data/krSheetData";
-import { jpProductSheetUrl, jpSheetData } from "./data/jpSheetData";
+import { krProductSheetUrl, krSheetData, krSheetUrl } from "./data/krSheetData";
+import { jpProductSheetUrl, jpSheetData, jpSheetUrl } from "./data/jpSheetData";
 import "./promotion.css";
 import type { DashboardData, ProductRow, Series } from "./types";
 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
@@ -198,6 +198,7 @@ function PageView({
 }
 function Total({ d, m }: { d: DashboardData | null; m: number }) {
   const t = d?.total,
+    jpApi = d?.jp,
     rate = d?.exchangeRates?.[String(m)] || 0,
     kr = t?.monthlyKr?.[m - 1] || 0,
     jp = t?.monthlyJpKrw?.[m - 1] ?? (t?.monthlyJpJpy?.[m - 1] || 0) * rate,
@@ -211,20 +212,29 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
             .reduce(
               (a, v, i) => a + v * (d?.exchangeRates?.[String(i + 1)] || 0),
               0,
-            )),
-    targets = (t?.targets || []).slice(0, m).reduce((a, v) => a + v, 0);
-  const monthly = series(months, [
-    { label: "KR sales", data: t?.monthlyKr, color: "#5a4ff3" },
-    {
-      label: "JP sales · converted KRW",
-      data: t?.monthlyJpKrw?.length
-        ? t.monthlyJpKrw
-        : t?.monthlyJpJpy?.map(
-            (v, i) => v * (d?.exchangeRates?.[String(i + 1)] || 0),
-          ),
-      color: "#ef4c8b",
-    },
-  ]);
+            ));
+
+  const krTargets = t?.targets || [];
+  // JP 목표는 현재 선택된 월 하나만 라이브 API가 채워주고 나머지 달은 0으로 옵니다
+  // (백엔드에 JP 연간 목표 시트 연동이 아직 없음) — 그만큼 통합/JP 목표 차트는 해당 월만 정확합니다.
+  const jpTargetsKrw = months.map((_, i) =>
+    Math.round((jpApi?.targets?.[i] || 0) * (d?.exchangeRates?.[String(i + 1)] || 0)),
+  );
+  const combinedTargets = krTargets.map((v, i) => v + (jpTargetsKrw[i] || 0));
+  const targetsYtd = combinedTargets.slice(0, m).reduce((a, v) => a + v, 0);
+
+  const monthlyJpKrw = t?.monthlyJpKrw?.length
+    ? t.monthlyJpKrw
+    : (t?.monthlyJpJpy || []).map(
+        (v, i) => v * (d?.exchangeRates?.[String(i + 1)] || 0),
+      );
+  const combinedMonthlySales = (t?.monthlyKr || []).map(
+    (v, i) => v + (monthlyJpKrw[i] || 0),
+  );
+
+  const krProductsTop5 = (d?.kr?.products?.[String(m)] || []).slice(0, 5);
+  const jpProductsTop5 = (d?.jp?.products?.[String(m)] || []).slice(0, 5);
+
   return (
     <>
       <section className="intro">
@@ -233,6 +243,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           국내 + 일본 전체 매출과 채널·국가별 목표 대비 실적을 한 화면에서
           확인합니다.
         </p>
+        <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">KR 데이터</a>
+        <span> · </span>
+        <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">JP 데이터</a>
       </section>
       <div className="kpis">
         <KPI
@@ -248,7 +261,7 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         />
         <KPI
           label="일본 비중"
-          value={`${total ? (jp / total) * 100 : (0).toFixed?.(1)}%`}
+          value={`${total ? ((jp / total) * 100).toFixed(1) : "0.0"}%`}
           note="전체 매출 내 일본 비중"
         />
         <KPI
@@ -258,14 +271,33 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         />
         <KPI
           label="YTD 전체 누계 목표"
-          value={money(targets)}
+          value={money(targetsYtd)}
           note="선택 월까지 누계 목표"
         />
       </div>
       <div className="grid">
         <ChartCard
-          title="월별 전체 매출 추이 · 국내 + 일본"
-          series={monthly}
+          title="KR + JP 통합 월별 매출 vs 목표 · KRW"
+          series={series(months, [
+            { label: "통합 매출", data: combinedMonthlySales, color: "#5a4ff3" },
+            { label: "통합 목표", data: combinedTargets, color: "#c9c7ff" },
+          ])}
+          wide
+        />
+        <ChartCard
+          title="KR 월별 매출 vs 목표 · KRW"
+          series={series(months, [
+            { label: "KR 매출", data: t?.monthlyKr, color: "#5a4ff3" },
+            { label: "KR 목표", data: krTargets, color: "#c9c7ff" },
+          ])}
+          wide
+        />
+        <ChartCard
+          title="JP 월별 매출 vs 목표 · 환산 KRW"
+          series={series(months, [
+            { label: "JP 환산 매출", data: monthlyJpKrw, color: "#ef4c8b" },
+            { label: "JP 환산 목표", data: jpTargetsKrw, color: "#f8bfd5" },
+          ])}
           wide
         />
         <ChartCard
@@ -290,30 +322,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
             { label: "JP", data: t?.ordersJp, color: "#ef4c8b" },
           ])}
         />
-        <ChartCard
-          title={`${m}월 상품별 판매 수 · TOTAL`}
-          series={productSeries(t?.products?.[String(m)])}
-        />
-        <ChartCard
-          title="YTD 월 목표 vs 실매출"
-          series={series(months, [
-            { label: "Target", data: t?.targets, color: "#c9c7ff" },
-            {
-              label: "Actual",
-              data: monthly.datasets[0].data.map(
-                (v, i) => v + monthly.datasets[1].data[i],
-              ),
-              color: "#5a4ff3",
-            },
-          ])}
-        />
-        <ChartCard
-          title="국가별 누계 목표 vs 누계 실매출"
-          series={series(
-            ["KR", "JP"],
-            [{ label: "Actual", data: [kr, jp], color: "#ef4c8b" }],
-          )}
-        />
+        <ChartCard title={`KR ${m}월 라인별 판매량 TOP 5`} series={productSeries(krProductsTop5)} />
+        <ChartCard title={`JP ${m}월 라인별 판매량 TOP 5`} series={productSeries(jpProductsTop5)} />
       </div>
     </>
   );
