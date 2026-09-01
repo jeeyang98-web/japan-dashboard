@@ -688,13 +688,21 @@ var KR_DAILY_SHEET_GID_ = 707880508;
  * "일별매출" 시트에서 진행 중인 달의 실시간 국내 매출 누계를 읽어옵니다.
  * 이 시트는 담당자가 매달 손으로 다시 구성해서 채널 열 순서/개수가 달마다
  * 바뀌고, 개별 채널 값 사이사이에 소계(국내 합계·일본 합계·전체 합계)
- * 셀이 섞여 있어 행을 통째로 합산하면 이중 계산됩니다. 그래서 직접
- * 합산하지 않고, "당월 누계" 행과 그 위 "국내 합계" 라벨이 붙은 열을
- * 라벨 기준으로 찾아 시트가 이미 계산해 둔 소계 값을 그대로 읽습니다
- * (올리브영 SELL-IN처럼 "국내 합계"에서 의도적으로 빠지는 항목이 있어
- * 직접 재계산하면 값이 달라짐 — 실측 확인함).
+ * 셀이 섞여 있어 행을 통째로 합산하면 이중 계산됩니다.
+ *
+ * 처음엔 "당월 누계" 요약 행(그 시트 위쪽의 별도 블록)에서 "국내 합계"
+ * 열을 찾아 그 달 값만 읽는 방식으로 짰는데, 이 요약 블록은 담당자가
+ * "이번 달" 걸로 매달 손으로 다시 만드는 것이라 — 달이 바뀌는 시점(예:
+ * 9/1)에 아직 새 달 블록으로 안 바뀌어 있으면 지난달 값을 그 달 값인 것
+ * 처럼 잘못 읽거나, 지난달이 그 사이에 0으로 비게 되는 문제가 있었음
+ * (실제로 발생 확인). 그래서 요약 블록 대신 일자별 로그(1월 1일부터
+ * 매일 쌓이는 원본 데이터, getKrMonthlyOrdersFromDailyLog_와 동일한
+ * 헤더 행)에서 "국내 합계" 열을 날짜 기준으로 월별 합산하는 방식으로
+ * 바꿨습니다 — "이번 달이 몇 월인지" 판단할 필요 자체가 없어져서 월
+ * 경계 문제가 생기지 않습니다.
  */
-function getKrCurrentMonthLiveTotal_() {
+function getKrMonthlyRevenueFromDailyLog_() {
+  const totals = new Array(12).fill(0);
   try {
     const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
     let sheet = null;
@@ -702,28 +710,41 @@ function getKrCurrentMonthLiveTotal_() {
     for (let i = 0; i < sheets.length; i++) {
       if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
     }
-    if (!sheet) return 0;
+    if (!sheet) return totals;
 
     const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
 
-    let totalRow = -1;
+    let headerRow = -1;
     for (let r = 0; r < values.length; r++) {
-      if (String(values[r][0] || "").indexOf("당월 누계") !== -1) totalRow = r;
+      let count = 0;
+      for (let c = 0; c < values[r].length; c++) {
+        const v = String(values[r][c] || "");
+        if (v === "판매수량" || v === "주문건수") count++;
+      }
+      if (count >= 3) { headerRow = r; break; }
     }
-    if (totalRow === -1) return 0;
+    if (headerRow === -1) return totals;
 
     let domesticCol = -1;
-    for (let r = totalRow; r >= 0 && r >= totalRow - 5 && domesticCol === -1; r--) {
+    for (let r = headerRow; r >= 0 && r >= headerRow - 3 && domesticCol === -1; r--) {
       const row = values[r];
-      for (let c = 1; c < row.length; c++) {
+      for (let c = 0; c < row.length; c++) {
         if (String(row[c] || "").indexOf("국내 합계") !== -1) { domesticCol = c; break; }
       }
     }
-    if (domesticCol === -1) return 0;
+    if (domesticCol === -1) return totals;
 
-    return toNumber_(values[totalRow][domesticCol]);
+    for (let r = headerRow + 1; r < values.length; r++) {
+      const date = String(values[r][0] || "");
+      const match = date.match(/^\d{4}-(\d{2})-\d{2}/);
+      if (!match) continue;
+      const m = Number(match[1]);
+      if (m < 1 || m > 12) continue;
+      totals[m - 1] += toNumber_(values[r][domesticCol]);
+    }
+    return totals;
   } catch (err) {
-    return 0;
+    return totals;
   }
 }
 
@@ -810,15 +831,13 @@ function getKrMonthlyClose_() {
     monthlyJpOtherKrw.push(toNumber_(row[8])); // col34
   }
 
-  // 진행 중인 이번 달은 "월마감"에 아직 0으로 남아있으므로, "일별매출" 시트의
-  // "당월 누계" 실시간 합계로 대체합니다. 이미 마감된 과거 달/아직 시작 안 한
-  // 미래 달은 건드리지 않습니다.
-  const currentMonthIndex = Number(
-    Utilities.formatDate(new Date(), "Asia/Seoul", "M")
-  ) - 1;
-  if (monthlyKr[currentMonthIndex] === 0) {
-    const live = getKrCurrentMonthLiveTotal_();
-    if (live) monthlyKr[currentMonthIndex] = live;
+  // 마감 전이라 "월마감"에 아직 0으로 남아있는 달은 "일별매출" 시트의
+  // 일자별 로그를 날짜 기준으로 합산한 값으로 채웁니다. "오늘이 몇 월인지"
+  // 로 어느 달을 보정할지 정하지 않으므로 월 경계(예: 9/1에 8월분이 아직
+  // 마감 전인 경우)에서도 안전합니다.
+  const dailyRevenue = getKrMonthlyRevenueFromDailyLog_();
+  for (let i = 0; i < 12; i++) {
+    if (monthlyKr[i] === 0 && dailyRevenue[i]) monthlyKr[i] = dailyRevenue[i];
   }
 
   // "월마감" 시트에는 판매수량 자체가 없어서, "일별매출" 시트의 1월부터의
@@ -1385,7 +1404,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v13:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v14:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
