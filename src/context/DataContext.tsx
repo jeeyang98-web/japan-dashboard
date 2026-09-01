@@ -53,6 +53,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       products: pick(p, "jpProducts", "productData", "products"),
       funnel: pick(p, "funnel", "funnelByMonth", "kpiFunnel"),
       dailyFunnel: rows(bundle.jpFunnel),
+      dailyProductQty: pick(p, "jpDailyProductQty") || {},
     },
     kr: {
       monthlySales: rows(
@@ -64,6 +65,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       orders: rows(pick(kf, "orders", "monthlyOrders")),
       products: pick(ks, "products", "productSalesByMonth"),
       funnel: pick(kf, "funnel", "funnelByMonth", "dailyKpi"),
+      dailyProductQty: pick(ks, "krDailyProductQty") || {},
     },
     product: {
       TOTAL:

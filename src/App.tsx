@@ -668,6 +668,31 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const api = d?.product?.[market];
   const x =
     api?.trends?.datasets?.length || api?.cumulative?.length ? api : fallback[market];
+
+  const krDaily = d?.kr?.dailyProductQty?.[String(m)];
+  const jpDaily = d?.jp?.dailyProductQty?.[String(m)];
+  const dailyQty: Series | undefined =
+    market === "KR"
+      ? krDaily
+      : market === "JP"
+        ? jpDaily
+        : krDaily || jpDaily
+          ? {
+              labels: (krDaily?.labels?.length || 0) >= (jpDaily?.labels?.length || 0)
+                ? krDaily?.labels || []
+                : jpDaily?.labels || [],
+              datasets: [{
+                label: "TOTAL daily quantity",
+                data: Array.from(
+                  { length: Math.max(krDaily?.labels?.length || 0, jpDaily?.labels?.length || 0) },
+                  (_, i) => (krDaily?.datasets?.[0]?.data?.[i] || 0) + (jpDaily?.datasets?.[0]?.data?.[i] || 0),
+                ),
+                backgroundColor: "#5a4ff3",
+                borderColor: "#5a4ff3",
+              }],
+            }
+          : undefined;
+
   return (
     <>
       <section className="intro">
@@ -699,6 +724,12 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
         <ChartCard
           title="상품별 월간 판매 추이 · 1월~12월"
           series={x?.trends}
+          kind="line"
+          wide
+        />
+        <ChartCard
+          title={`${m}월 일간 판매 추이`}
+          series={dailyQty}
           kind="line"
           wide
         />
