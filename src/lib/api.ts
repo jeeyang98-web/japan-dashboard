@@ -13,11 +13,14 @@ export type DashboardApiBundle = {
   jpFunnel: any[];
 };
 const responseCache = new Map<string, Promise<JsonObject>>();
-function endpointUrl(api: ApiName, month: number) {
+function endpointUrl(api: ApiName, month: number, force: boolean) {
   if (!BASE_URL) throw new Error("VITE_GAS_API_URL is not configured.");
   const url = new URL(BASE_URL);
   url.searchParams.set("api", api);
   url.searchParams.set("month", String(month));
+  // Apps Script 쪽 10분 서버 캐시까지 건너뛰고 시트를 바로 다시 읽게 함
+  // (Refresh 버튼을 눌렀을 때만 — 평소 로드는 캐시를 그대로 씀)
+  if (force) url.searchParams.set("force", "1");
   return url.toString();
 }
 async function request(
@@ -25,7 +28,7 @@ async function request(
   month: number,
   force = false,
 ): Promise<JsonObject> {
-  const url = endpointUrl(api, month);
+  const url = endpointUrl(api, month, force);
   if (!force && responseCache.has(url)) return responseCache.get(url)!;
   const pending = fetch(url, { method: "GET", redirect: "follow" })
     .then(async (response) => {
