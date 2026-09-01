@@ -225,7 +225,7 @@ function getPlatformData(selectedMonth) {
   // 일별 수량을 월 단위로 합산합니다. (기존 products 필드는 index.html 레거시
   // 대시보드가 그대로 쓰고 있어 건드리지 않고, 별도 필드로 추가)
   const jpProducts = getJpMonthlyProductRows_();
-  const jpDailyProductQty = getJpDailyProductQtyByMonth_();
+  const jpDailyProductQty = getJpDailyLineQtyByMonth_(month);
 
   return {
     kpi: kpi,
@@ -877,59 +877,62 @@ function getKrMonthlyOrdersFromDailyLog_() {
  * "일간 판매 추이" 차트(KR)에서 사용 — getKrDailySalesByMonth_와 같은
  * 구조지만 매출액이 아니라 수량을 담습니다.
  */
-function getKrDailyQuantityByMonth_() {
-  const result = {};
+/**
+ * "상품별매출"(KR_PRODUCT_SHEET_GID_) 시트는 월별 요약 컬럼 뒤에 1월 1일부터
+ * 매일 2컬럼(수량/매출)짜리 일자별 블록이 이어집니다(라벨이 "26-08-31" 형식).
+ * 이 함수는 지정한 달에 해당하는 날짜 컬럼만 찾아서, 라인명(E열, 이 시트는
+ * 라인의 모든 SKU 행에 라인명이 매번 채워져 있어 forward-fill 불필요)별로
+ * 하루치 수량을 더합니다. Product 페이지의 "일간 판매 추이" 차트(KR, 상품
+ * 라인별)에서 사용.
+ */
+function getKrDailyLineQtyByMonth_(month) {
+  const empty = { labels: [], series: {} };
   try {
     const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
     let sheet = null;
     const sheets = ss.getSheets();
     for (let i = 0; i < sheets.length; i++) {
-      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+      if (sheets[i].getSheetId() === KR_PRODUCT_SHEET_GID_) { sheet = sheets[i]; break; }
     }
-    if (!sheet) return result;
+    if (!sheet) return empty;
 
-    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
-
-    let headerRow = -1;
-    for (let r = 0; r < values.length; r++) {
-      let count = 0;
-      for (let c = 0; c < values[r].length; c++) {
-        const v = String(values[r][c] || "");
-        if (v === "판매수량" || v === "주문건수") count++;
-      }
-      if (count >= 3) { headerRow = r; break; }
+    const row5 = sheet.getRange(5, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    const mm = (month < 10 ? "0" : "") + month;
+    const dayCols = [];
+    for (let c = 0; c < row5.length; c++) {
+      const match = String(row5[c] || "").match(/^\d{2}-(\d{2})-(\d{2})$/);
+      if (match && match[1] === mm) dayCols.push({ col: c, day: Number(match[2]) });
     }
-    if (headerRow === -1) return result;
+    if (!dayCols.length) return empty;
+    dayCols.sort(function (a, b) { return a.day - b.day; });
 
-    const byMonth = {};
-    for (let r = headerRow + 1; r < values.length; r++) {
-      const date = String(values[r][0] || "");
-      const match = date.match(/^\d{4}-(\d{2})-(\d{2})/);
-      if (!match) continue;
-      const m = Number(match[1]);
-      const day = Number(match[2]);
-      if (m < 1 || m > 12) continue;
-      let daySum = 0;
-      KR_DAILY_ORDER_COLS_.forEach(function (c) { daySum += toNumber_(values[r][c]); });
-      if (!byMonth[m]) byMonth[m] = { labels: [], data: [] };
-      byMonth[m].labels.push(m + "/" + day);
-      byMonth[m].data.push(daySum);
+    // "TOTAL" 채널 블록 경계 (getKrLineProductRows_ 와 동일 로직)
+    const colB = sheet.getRange(7, 2, sheet.getLastRow() - 6, 1).getDisplayValues();
+    let endRow = 6 + colB.length;
+    for (let i = 0; i < colB.length; i++) {
+      if (String(colB[i][0] || "").indexOf("합계") !== -1) { endRow = 7 + i - 1; break; }
     }
+    const numRows = endRow - 7 + 1;
+    if (numRows <= 0) return empty;
 
-    Object.keys(byMonth).forEach(function (m) {
-      result[m] = {
-        labels: byMonth[m].labels,
-        datasets: [{
-          label: "KR daily quantity",
-          data: byMonth[m].data,
-          backgroundColor: "#5a4ff3",
-          borderColor: "#5a4ff3"
-        }]
-      };
+    let maxCol = 0;
+    dayCols.forEach(function (d) { if (d.col + 1 > maxCol) maxCol = d.col + 1; });
+    const data = sheet.getRange(7, 1, numRows, maxCol).getDisplayValues();
+
+    const series = {};
+    data.forEach(function (row) {
+      const name = String(row[4] || "").trim(); // E열: 라인명
+      if (!name) return;
+      if (!series[name]) series[name] = new Array(dayCols.length).fill(0);
+      dayCols.forEach(function (d, i) { series[name][i] += toNumber_(row[d.col]); });
     });
-    return result;
+
+    return {
+      labels: dayCols.map(function (d) { return month + "/" + d.day; }),
+      series: series
+    };
   } catch (err) {
-    return result;
+    return empty;
   }
 }
 
@@ -1126,54 +1129,56 @@ function getJpMonthlyTargets_() {
  * SKU 행의 실제 라인명을 복원합니다.
  */
 /**
- * "상품별 매출" 시트의 일자별 수량 컬럼을 모든 상품 행에 대해 합산해서,
- * 날짜별 총 판매수량 Series(월별로 묶음)를 만듭니다. Product 페이지의
- * "일간 판매 추이" 차트(JP)에서 사용.
+ * "상품별 매출" 시트의 일자별 수량 컬럼에서, 지정한 달에 해당하는 날짜만
+ * 골라 라인명(B열, forward-fill 필요 — getJpMonthlyProductRows_와 동일)별로
+ * 하루치 수량을 모읍니다. Product 페이지의 "일간 판매 추이" 차트(JP, 상품
+ * 라인별)에서 사용.
  */
-function getJpDailyProductQtyByMonth_() {
-  const result = {};
+function getJpDailyLineQtyByMonth_(month) {
+  const empty = { labels: [], series: {} };
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = requireSheet_(ss, "상품별 매출");
   const meta = getProductDailyMeta_(sheet);
 
-  if (!meta.rowCount || !meta.dateCount) return result;
+  if (!meta.rowCount || !meta.dateCount) return empty;
+
+  const dayColIdx = [];
+  meta.dates.forEach(function (date, i) {
+    if (Number(date.slice(5, 7)) === month) dayColIdx.push(i);
+  });
+  if (!dayColIdx.length) return empty;
 
   const qtyValues = sheet.getRange(6, 7, meta.rowCount, meta.dateCount).getValues();
   const names = sheet
     .getRange(6, 3, meta.rowCount, 1)
     .getDisplayValues()
     .map(row => String(row[0] || "").trim());
+  const lineLabels = sheet
+    .getRange(6, 2, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(row => String(row[0] || "").trim());
 
-  const dailyTotals = new Array(meta.dateCount).fill(0);
-  for (let r = 0; r < meta.rowCount; r++) {
-    if (!names[r] || isAggregateRowLabel_(names[r])) continue;
-    for (let c = 0; c < meta.dateCount; c++) {
-      dailyTotals[c] += Number(qtyValues[r][c] || 0);
-    }
-  }
-
-  const byMonth = {};
-  meta.dates.forEach((date, c) => {
-    const m = Number(date.slice(5, 7));
-    const day = Number(date.slice(8, 10));
-    if (!m || m < 1 || m > 12) return;
-    if (!byMonth[m]) byMonth[m] = { labels: [], data: [] };
-    byMonth[m].labels.push(m + "/" + day);
-    byMonth[m].data.push(dailyTotals[c]);
+  let lastLine = "";
+  const lines = lineLabels.map(function (label, i) {
+    if (label) lastLine = label;
+    return lastLine || names[i];
   });
 
-  Object.keys(byMonth).forEach(function (m) {
-    result[m] = {
-      labels: byMonth[m].labels,
-      datasets: [{
-        label: "JP daily quantity",
-        data: byMonth[m].data,
-        backgroundColor: "#ef4c8b",
-        borderColor: "#ef4c8b"
-      }]
-    };
+  const series = {};
+  names.forEach(function (name, rowIndex) {
+    if (!name || isAggregateRowLabel_(name)) return;
+    const line = lines[rowIndex];
+    if (!line || isAggregateRowLabel_(line)) return;
+    if (!series[line]) series[line] = new Array(dayColIdx.length).fill(0);
+    dayColIdx.forEach(function (colIdx, i) {
+      series[line][i] += Number(qtyValues[rowIndex][colIdx] || 0);
+    });
   });
-  return result;
+
+  return {
+    labels: dayColIdx.map(function (colIdx) { return month + "/" + Number(meta.dates[colIdx].slice(8, 10)); }),
+    series: series
+  };
 }
 
 function getJpMonthlyProductRows_() {
@@ -1374,7 +1379,7 @@ function getKoreaProductSalesData(month) {
     month: month,
     monthLabel: month + "월",
     products: products,
-    krDailyProductQty: getKrDailyQuantityByMonth_()
+    krDailyProductQty: getKrDailyLineQtyByMonth_(month)
   };
 }
 
@@ -1591,7 +1596,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v16:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v17:" + api + ":" + month;
     var skipCache = String(e.parameter.force || "") === "1";
     var cached = skipCache ? null : cache.get(cacheKey);
 
