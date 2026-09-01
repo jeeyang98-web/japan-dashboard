@@ -748,6 +748,76 @@ function getKrMonthlyRevenueFromDailyLog_() {
   }
 }
 
+/**
+ * "일별매출" 시트의 일자별 로그에서 "국내 합계" 매출을 날짜별로 그대로
+ * 뽑아 월별 Series(labels: "M/D", datasets: [{data: 매출액}])로 묶습니다.
+ * KR Executive의 "일별 매출 추이" 차트가 쓰는데, 이 API(krFunnel)가
+ * 지금까지 일별 데이터 필드 자체를 반환하지 않아서 프론트엔드가 항상
+ * 정적 스냅샷(8/27까지)으로 폴백하고 있었습니다.
+ */
+function getKrDailySalesByMonth_() {
+  const result = {};
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    let sheet = null;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) return result;
+
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
+
+    let headerRow = -1;
+    for (let r = 0; r < values.length; r++) {
+      let count = 0;
+      for (let c = 0; c < values[r].length; c++) {
+        const v = String(values[r][c] || "");
+        if (v === "판매수량" || v === "주문건수") count++;
+      }
+      if (count >= 3) { headerRow = r; break; }
+    }
+    if (headerRow === -1) return result;
+
+    let domesticCol = -1;
+    for (let r = headerRow; r >= 0 && r >= headerRow - 3 && domesticCol === -1; r--) {
+      const row = values[r];
+      for (let c = 0; c < row.length; c++) {
+        if (String(row[c] || "").indexOf("국내 합계") !== -1) { domesticCol = c; break; }
+      }
+    }
+    if (domesticCol === -1) return result;
+
+    const byMonth = {};
+    for (let r = headerRow + 1; r < values.length; r++) {
+      const date = String(values[r][0] || "");
+      const match = date.match(/^\d{4}-(\d{2})-(\d{2})/);
+      if (!match) continue;
+      const m = Number(match[1]);
+      const day = Number(match[2]);
+      if (m < 1 || m > 12) continue;
+      if (!byMonth[m]) byMonth[m] = { labels: [], data: [] };
+      byMonth[m].labels.push(m + "/" + day);
+      byMonth[m].data.push(toNumber_(values[r][domesticCol]));
+    }
+
+    Object.keys(byMonth).forEach(function (m) {
+      result[m] = {
+        labels: byMonth[m].labels,
+        datasets: [{
+          label: "KR daily sales",
+          data: byMonth[m].data,
+          backgroundColor: "#5a4ff3",
+          borderColor: "#5a4ff3"
+        }]
+      };
+    });
+    return result;
+  } catch (err) {
+    return result;
+  }
+}
+
 // B,E,H,K,M,O,Q,S,U열: 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/
 // CJ ENM/시코르. 네이버·29CM은 "주문건수"를, 나머지 채널은 "판매수량"을
 // 그대로 구매건수로 취급합니다(사용자 확인 — 판매수량을 주문건수와
@@ -1237,7 +1307,8 @@ function getKoreaFunnelData(month) {
     month: month,
     monthLabel: month + "월",
     orders: ordersByMonth,
-    funnel: funnel
+    funnel: funnel,
+    dailyByMonth: getKrDailySalesByMonth_()
   };
 }
 
@@ -1404,7 +1475,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v14:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v15:" + api + ":" + month;
     var cached = cache.get(cacheKey);
 
     if (cached) {
