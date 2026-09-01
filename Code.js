@@ -1476,7 +1476,8 @@ function serveDashboardApi_(e) {
   try {
     var cache = CacheService.getScriptCache();
     var cacheKey = "dashboard-api-v15:" + api + ":" + month;
-    var cached = cache.get(cacheKey);
+    var skipCache = String(e.parameter.force || "") === "1";
+    var cached = skipCache ? null : cache.get(cacheKey);
 
     if (cached) {
       return dashboardJson_({
