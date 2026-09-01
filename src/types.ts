@@ -11,6 +11,7 @@ export type Series = {
 };
 export type DailyFunnelRow = { date: string; traffic: number; cart: number; orders: number; conversionRate: number };
 export type ProductRow = { name: string; quantity: number };
+export type DailyLineQty = { labels: string[]; series: Record<string, number[]> };
 export type DashboardData = {
   updatedAt?: string;
   exchangeRates?: Record<string, number>;
@@ -32,7 +33,7 @@ export type DashboardData = {
     orders?: number[];
     products?: Record<string, ProductRow[]>;
     funnel?: Record<string, number>[];
-    dailyProductQty?: Record<string, Series>;
+    dailyProductQty?: DailyLineQty;
   };
   jp?: {
     monthlySales: number[];
@@ -42,7 +43,7 @@ export type DashboardData = {
     products?: Record<string, ProductRow[]>;
     funnel?: Record<string, number>[];
     dailyFunnel?: DailyFunnelRow[];
-    dailyProductQty?: Record<string, Series>;
+    dailyProductQty?: DailyLineQty;
   };
   product?: Record<
     "TOTAL" | "KR" | "JP",

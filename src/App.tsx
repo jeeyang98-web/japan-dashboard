@@ -27,7 +27,7 @@ import {
 import { krDailySheetUrl, krProductSheetUrl, krSheetData, krSheetUrl } from "./data/krSheetData";
 import { jpProductSheetUrl, jpSheetData, jpSheetUrl } from "./data/jpSheetData";
 import "./promotion.css";
-import type { DashboardData, ProductRow, Series } from "./types";
+import type { DashboardData, DailyLineQty, ProductRow, Series } from "./types";
 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 type Page =
   | "total"
@@ -649,6 +649,34 @@ function buildProductMarketData(monthly: Record<string, ProductRow[]>) {
     cumulative: sumProductRows(monthKeys.flatMap((k) => monthly[k] || []), 10),
   };
 }
+function buildDailyLineSeries(sources: (DailyLineQty | undefined)[], limit = 5): Series | undefined {
+  const labels = sources.find((s) => s?.labels?.length)?.labels;
+  if (!labels?.length) return undefined;
+  const merged: Record<string, number[]> = {};
+  sources.forEach((s) => {
+    if (!s) return;
+    Object.entries(s.series).forEach(([name, data]) => {
+      if (!merged[name]) merged[name] = new Array(labels.length).fill(0);
+      data.forEach((v, i) => {
+        merged[name][i] = (merged[name][i] || 0) + (v || 0);
+      });
+    });
+  });
+  const top = Object.entries(merged)
+    .map(([name, data]) => ({ name, data, total: data.reduce((a, b) => a + b, 0) }))
+    .filter((t) => t.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+  return {
+    labels,
+    datasets: top.map((t, i) => ({
+      label: t.name,
+      data: t.data,
+      backgroundColor: productChartColors[i % productChartColors.length],
+      borderColor: productChartColors[i % productChartColors.length],
+    })),
+  };
+}
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const fallback = useMemo(() => {
@@ -669,29 +697,14 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const x =
     api?.trends?.datasets?.length || api?.cumulative?.length ? api : fallback[market];
 
-  const krDaily = d?.kr?.dailyProductQty?.[String(m)];
-  const jpDaily = d?.jp?.dailyProductQty?.[String(m)];
-  const dailyQty: Series | undefined =
+  const krDaily = d?.kr?.dailyProductQty;
+  const jpDaily = d?.jp?.dailyProductQty;
+  const dailyQty =
     market === "KR"
-      ? krDaily
+      ? buildDailyLineSeries([krDaily])
       : market === "JP"
-        ? jpDaily
-        : krDaily || jpDaily
-          ? {
-              labels: (krDaily?.labels?.length || 0) >= (jpDaily?.labels?.length || 0)
-                ? krDaily?.labels || []
-                : jpDaily?.labels || [],
-              datasets: [{
-                label: "TOTAL daily quantity",
-                data: Array.from(
-                  { length: Math.max(krDaily?.labels?.length || 0, jpDaily?.labels?.length || 0) },
-                  (_, i) => (krDaily?.datasets?.[0]?.data?.[i] || 0) + (jpDaily?.datasets?.[0]?.data?.[i] || 0),
-                ),
-                backgroundColor: "#5a4ff3",
-                borderColor: "#5a4ff3",
-              }],
-            }
-          : undefined;
+        ? buildDailyLineSeries([jpDaily])
+        : buildDailyLineSeries([krDaily, jpDaily]);
 
   return (
     <>
