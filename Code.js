@@ -225,6 +225,7 @@ function getPlatformData(selectedMonth) {
   // 일별 수량을 월 단위로 합산합니다. (기존 products 필드는 index.html 레거시
   // 대시보드가 그대로 쓰고 있어 건드리지 않고, 별도 필드로 추가)
   const jpProducts = getJpMonthlyProductRows_();
+  const jpDailyProductQty = getJpDailyProductQtyByMonth_();
 
   return {
     kpi: kpi,
@@ -233,6 +234,7 @@ function getPlatformData(selectedMonth) {
     monthlySummary: monthlySummary,
     products: products,
     jpProducts: jpProducts,
+    jpDailyProductQty: jpDailyProductQty,
     productTotals: productTotals,
     promotion: promotion,
     availableMonths: availableMonths,
@@ -870,6 +872,68 @@ function getKrMonthlyOrdersFromDailyLog_() {
 }
 
 /**
+ * "일별매출" 시트의 일자별 로그에서 KR_DAILY_ORDER_COLS_(판매수량/주문건수)
+ * 합계를 날짜별로 그대로 뽑아 월별 Series로 묶습니다. Product 페이지의
+ * "일간 판매 추이" 차트(KR)에서 사용 — getKrDailySalesByMonth_와 같은
+ * 구조지만 매출액이 아니라 수량을 담습니다.
+ */
+function getKrDailyQuantityByMonth_() {
+  const result = {};
+  try {
+    const ss = SpreadsheetApp.openById(KR_SPREADSHEET_ID);
+    let sheet = null;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === KR_DAILY_SHEET_GID_) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) return result;
+
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getDisplayValues();
+
+    let headerRow = -1;
+    for (let r = 0; r < values.length; r++) {
+      let count = 0;
+      for (let c = 0; c < values[r].length; c++) {
+        const v = String(values[r][c] || "");
+        if (v === "판매수량" || v === "주문건수") count++;
+      }
+      if (count >= 3) { headerRow = r; break; }
+    }
+    if (headerRow === -1) return result;
+
+    const byMonth = {};
+    for (let r = headerRow + 1; r < values.length; r++) {
+      const date = String(values[r][0] || "");
+      const match = date.match(/^\d{4}-(\d{2})-(\d{2})/);
+      if (!match) continue;
+      const m = Number(match[1]);
+      const day = Number(match[2]);
+      if (m < 1 || m > 12) continue;
+      let daySum = 0;
+      KR_DAILY_ORDER_COLS_.forEach(function (c) { daySum += toNumber_(values[r][c]); });
+      if (!byMonth[m]) byMonth[m] = { labels: [], data: [] };
+      byMonth[m].labels.push(m + "/" + day);
+      byMonth[m].data.push(daySum);
+    }
+
+    Object.keys(byMonth).forEach(function (m) {
+      result[m] = {
+        labels: byMonth[m].labels,
+        datasets: [{
+          label: "KR daily quantity",
+          data: byMonth[m].data,
+          backgroundColor: "#5a4ff3",
+          borderColor: "#5a4ff3"
+        }]
+      };
+    });
+    return result;
+  } catch (err) {
+    return result;
+  }
+}
+
+/**
  * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
  * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
  * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있어
@@ -1061,6 +1125,57 @@ function getJpMonthlyTargets_() {
  * 마지막으로 채워진 라인명을 그대로 이어받는(forward-fill) 방식으로 각
  * SKU 행의 실제 라인명을 복원합니다.
  */
+/**
+ * "상품별 매출" 시트의 일자별 수량 컬럼을 모든 상품 행에 대해 합산해서,
+ * 날짜별 총 판매수량 Series(월별로 묶음)를 만듭니다. Product 페이지의
+ * "일간 판매 추이" 차트(JP)에서 사용.
+ */
+function getJpDailyProductQtyByMonth_() {
+  const result = {};
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = requireSheet_(ss, "상품별 매출");
+  const meta = getProductDailyMeta_(sheet);
+
+  if (!meta.rowCount || !meta.dateCount) return result;
+
+  const qtyValues = sheet.getRange(6, 7, meta.rowCount, meta.dateCount).getValues();
+  const names = sheet
+    .getRange(6, 3, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(row => String(row[0] || "").trim());
+
+  const dailyTotals = new Array(meta.dateCount).fill(0);
+  for (let r = 0; r < meta.rowCount; r++) {
+    if (!names[r] || isAggregateRowLabel_(names[r])) continue;
+    for (let c = 0; c < meta.dateCount; c++) {
+      dailyTotals[c] += Number(qtyValues[r][c] || 0);
+    }
+  }
+
+  const byMonth = {};
+  meta.dates.forEach((date, c) => {
+    const m = Number(date.slice(5, 7));
+    const day = Number(date.slice(8, 10));
+    if (!m || m < 1 || m > 12) return;
+    if (!byMonth[m]) byMonth[m] = { labels: [], data: [] };
+    byMonth[m].labels.push(m + "/" + day);
+    byMonth[m].data.push(dailyTotals[c]);
+  });
+
+  Object.keys(byMonth).forEach(function (m) {
+    result[m] = {
+      labels: byMonth[m].labels,
+      datasets: [{
+        label: "JP daily quantity",
+        data: byMonth[m].data,
+        backgroundColor: "#ef4c8b",
+        borderColor: "#ef4c8b"
+      }]
+    };
+  });
+  return result;
+}
+
 function getJpMonthlyProductRows_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = requireSheet_(ss, "상품별 매출");
@@ -1258,7 +1373,8 @@ function getKoreaProductSalesData(month) {
   return {
     month: month,
     monthLabel: month + "월",
-    products: products
+    products: products,
+    krDailyProductQty: getKrDailyQuantityByMonth_()
   };
 }
 
@@ -1475,7 +1591,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v15:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v16:" + api + ":" + month;
     var skipCache = String(e.parameter.force || "") === "1";
     var cached = skipCache ? null : cache.get(cacheKey);
 
