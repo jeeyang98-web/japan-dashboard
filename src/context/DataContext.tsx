@@ -88,7 +88,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<DashboardData | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState<string | null>(null),
-    [month, setMonth] = useState(8);
+    [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const requestId = useRef(0);
   const get = (force = false) => {
     const id = ++requestId.current;
