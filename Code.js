@@ -1313,6 +1313,20 @@ function getKrLineProductRows_() {
     }
   });
 
+  // "N월" 합계 컬럼이 아직 시트에 만들어지지 않은 달(주로 이번 달)은 같은
+  // 시트의 일별 수량(getKrDailyLineQtyByMonth_)을 합산해 수량만이라도 채웁니다.
+  // (매출은 일별 수량 쪽에 없어 0으로 남습니다 — 월별 합계 컬럼이 생기면 자동 대체됨)
+  for (let m = 1; m <= 12; m++) {
+    if (monthQtyCol[m - 1] !== -1) continue;
+    const daily = getKrDailyLineQtyByMonth_(m);
+    if (!daily.labels.length) continue;
+    order.forEach(function (name) {
+      const values = daily.series[name];
+      if (!values) return;
+      byName[name].monthly[m - 1].quantity += values.reduce(function (sum, v) { return sum + Number(v || 0); }, 0);
+    });
+  }
+
   return order.map(function (name) { return byName[name]; });
 }
 
@@ -1596,7 +1610,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v18:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v19:" + api + ":" + month;
     var skipCache = String(e.parameter.force || "") === "1";
     var cached = skipCache ? null : cache.get(cacheKey);
 
