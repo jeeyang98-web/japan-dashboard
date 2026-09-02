@@ -1507,7 +1507,14 @@ function nullableNumber_(value) {
  */
 function isAggregateRowLabel_(name) {
   const normalized = String(name || "").trim().toLowerCase();
-  return normalized === "total" || normalized === "합계" || normalized === "총계";
+  // 순수 숫자만 있는 값("1", "2", ...)은 "상품별 매출" 시트의 랭킹용 보조
+  // 표가 같은 열 범위에 섞여 들어오면서 생기는 잡음이라 상품명이 아닙니다.
+  return (
+    normalized === "total" ||
+    normalized === "합계" ||
+    normalized === "총계" ||
+    /^\d+$/.test(normalized)
+  );
 }
 
 /**
@@ -1610,7 +1617,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v19:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v20:" + api + ":" + month;
     var skipCache = String(e.parameter.force || "") === "1";
     var cached = skipCache ? null : cache.get(cacheKey);
 
