@@ -1596,7 +1596,7 @@ function serveDashboardApi_(e) {
 
   try {
     var cache = CacheService.getScriptCache();
-    var cacheKey = "dashboard-api-v17:" + api + ":" + month;
+    var cacheKey = "dashboard-api-v18:" + api + ":" + month;
     var skipCache = String(e.parameter.force || "") === "1";
     var cached = skipCache ? null : cache.get(cacheKey);
 
@@ -1687,9 +1687,94 @@ function getPromotionData_() {
   var range = sheet.getDataRange();
   var values = range.getValues();
   var formats = range.getNumberFormats();
+  var megawari = extractCampaignTable_(values, formats, "MEGAWARI", "분기");
+  var megapo = extractCampaignTable_(values, formats, "MEGAPO", "월");
+
+  var megawariLatest = megawari.length ? megawari[megawari.length - 1] : null;
+  var megapoLatest = megapo.length ? megapo[megapo.length - 1] : null;
+  var megawariRange = megawariLatest ? parsePeriodRange_(megawariLatest.period) : null;
+  var megapoRange = megapoLatest ? parsePeriodRange_(megapoLatest.period) : null;
+
   return {
-    megawari: extractCampaignTable_(values, formats, "MEGAWARI", "분기"),
-    megapo: extractCampaignTable_(values, formats, "MEGAPO", "월")
+    megawari: megawari,
+    megapo: megapo,
+    megawariPeriod: megawariLatest ? megawariLatest.period : "",
+    megapoPeriod: megapoLatest ? megapoLatest.period : "",
+    megawariProductDaily: megawariRange
+      ? getJpDailyLineQtyByDateRange_(megawariRange.startYmd, megawariRange.endYmd)
+      : { labels: [], series: {} },
+    megapoProductDaily: megapoRange
+      ? getJpDailyLineQtyByDateRange_(megapoRange.startYmd, megapoRange.endYmd)
+      : { labels: [], series: {} }
+  };
+}
+
+/**
+ * "2/27~3/11", "8/1-8/9" 같은 프로모션 기간 문자열을 실제 날짜 범위로 변환합니다.
+ * 형식이 맞지 않으면 null을 반환합니다.
+ */
+function parsePeriodRange_(periodText) {
+  var text = String(periodText || "").trim();
+  var m = text.match(/^(\d{1,2})\/(\d{1,2})\s*[~-]\s*(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return null;
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  return {
+    startYmd: "2026-" + pad(m[1]) + "-" + pad(m[2]),
+    endYmd: "2026-" + pad(m[3]) + "-" + pad(m[4])
+  };
+}
+
+/**
+ * "상품별 매출" 시트에서 지정한 날짜 범위(startYmd~endYmd)의 라인별 일별 판매수량을 반환합니다.
+ * getJpDailyLineQtyByMonth_ 와 동일한 로직이나 월 단위가 아닌 임의의 날짜 범위를 받습니다.
+ */
+function getJpDailyLineQtyByDateRange_(startYmd, endYmd) {
+  var empty = { labels: [], series: {} };
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = requireSheet_(ss, "상품별 매출");
+  var meta = getProductDailyMeta_(sheet);
+
+  if (!meta.rowCount || !meta.dateCount) return empty;
+
+  var dayColIdx = [];
+  meta.dates.forEach(function (date, i) {
+    if (date >= startYmd && date <= endYmd) dayColIdx.push(i);
+  });
+  if (!dayColIdx.length) return empty;
+
+  var qtyValues = sheet.getRange(6, 7, meta.rowCount, meta.dateCount).getValues();
+  var names = sheet
+    .getRange(6, 3, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(function (row) { return String(row[0] || "").trim(); });
+  var lineLabels = sheet
+    .getRange(6, 2, meta.rowCount, 1)
+    .getDisplayValues()
+    .map(function (row) { return String(row[0] || "").trim(); });
+
+  var lastLine = "";
+  var lines = lineLabels.map(function (label, i) {
+    if (label) lastLine = label;
+    return lastLine || names[i];
+  });
+
+  var series = {};
+  names.forEach(function (name, rowIndex) {
+    if (!name || isAggregateRowLabel_(name)) return;
+    var line = lines[rowIndex];
+    if (!line || isAggregateRowLabel_(line)) return;
+    if (!series[line]) series[line] = new Array(dayColIdx.length).fill(0);
+    dayColIdx.forEach(function (colIdx, i) {
+      series[line][i] += Number(qtyValues[rowIndex][colIdx] || 0);
+    });
+  });
+
+  return {
+    labels: dayColIdx.map(function (colIdx) {
+      var d = meta.dates[colIdx];
+      return Number(d.slice(5, 7)) + "/" + Number(d.slice(8, 10));
+    }),
+    series: series
   };
 }
 
