@@ -56,6 +56,10 @@ export type DashboardData = {
   promotion?: {
     megawariCampaigns?: { period: string; group: string; sales: number[] }[];
     megapoCampaigns?: { period: string; group: string; sales: number[] }[];
+    megawariPeriod?: string;
+    megapoPeriod?: string;
+    megawariProductDaily?: DailyLineQty;
+    megapoProductDaily?: DailyLineQty;
   };
   marketing?: Record<string, unknown>;
   competitor?: Record<string, unknown>;

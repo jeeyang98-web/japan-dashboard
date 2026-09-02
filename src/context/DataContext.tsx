@@ -78,6 +78,10 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
     promotion: {
       megawariCampaigns: rows(pick(promo, "megawari", "megawariCampaigns")),
       megapoCampaigns: rows(pick(promo, "megapo", "megapoCampaigns")),
+      megawariPeriod: pick(promo, "megawariPeriod") || "",
+      megapoPeriod: pick(promo, "megapoPeriod") || "",
+      megawariProductDaily: pick(promo, "megawariProductDaily") || {},
+      megapoProductDaily: pick(promo, "megapoProductDaily") || {},
     },
     marketing: pick(p, "marketing") || {},
     competitor: pick(p, "competitor") || {},

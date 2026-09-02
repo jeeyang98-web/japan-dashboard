@@ -181,7 +181,7 @@ function PageView({
       />
     );
   if (page === "product") return <Product d={data} m={month} />;
-  if (page === "promotion") return <Promotion d={data} m={month} />;
+  if (page === "promotion") return <Promotion d={data} />;
   return (
     <section className="intro">
       <h2>{titles[page][0].replace(" Dashboard", "")}</h2>
@@ -774,7 +774,7 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
     </>
   );
 }
-function Promotion({ d, m }: { d: DashboardData | null; m: number }) {
+function Promotion({ d }: { d: DashboardData | null }) {
   const api = d?.promotion;
   const megawari = api?.megawariCampaigns?.length ? api.megawariCampaigns : megawariCampaigns;
   const megapo = api?.megapoCampaigns?.length ? api.megapoCampaigns : megapoCampaigns;
@@ -786,7 +786,8 @@ function Promotion({ d, m }: { d: DashboardData | null; m: number }) {
     megawariDayColumnRows: buildDayColumnRows(megawari, "분기"),
     megapoDayColumnRows: buildDayColumnRows(megapo, "월"),
   };
-  const dailyProductQty = buildDailyLineSeries([d?.jp?.dailyProductQty, d?.kr?.dailyProductQty]);
+  const megawariProductDaily = buildDailyLineSeries([api?.megawariProductDaily]);
+  const megapoProductDaily = buildDailyLineSeries([api?.megapoProductDaily]);
   return (
     <>
       <section className="intro">
@@ -810,10 +811,14 @@ function Promotion({ d, m }: { d: DashboardData | null; m: number }) {
           kind="line"
         />
         <ChartCard
-          title={`${m}월 일별 상품별 판매 추이 · JP+KR`}
-          series={dailyProductQty}
+          title={`MEGAWARI 일별 상품별 판매 추이${api?.megawariPeriod ? ` · ${api.megawariPeriod}` : ""}`}
+          series={megawariProductDaily}
           kind="line"
-          wide
+        />
+        <ChartCard
+          title={`MEGAPO 일별 상품별 판매 추이${api?.megapoPeriod ? ` · ${api.megapoPeriod}` : ""}`}
+          series={megapoProductDaily}
+          kind="line"
         />
         <ChartCard title="MEGAWARI 분기별 총매출" series={p?.megawariTotals} />
         <ChartCard title="MEGAPO 월별 총매출" series={p?.megapoTotals} />
