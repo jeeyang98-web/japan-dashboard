@@ -45,14 +45,7 @@ export type DashboardData = {
     dailyFunnel?: DailyFunnelRow[];
     dailyProductQty?: DailyLineQty;
   };
-  product?: Record<
-    "TOTAL" | "KR" | "JP",
-    {
-      trends?: Series;
-      monthly?: Record<string, ProductRow[]>;
-      cumulative?: ProductRow[];
-    }
-  >;
+  product?: Record<"KR" | "JP", { monthly?: Record<string, ProductRow[]> }>;
   promotion?: {
     megawariCampaigns?: { period: string; group: string; sales: number[] }[];
     megapoCampaigns?: { period: string; group: string; sales: number[] }[];

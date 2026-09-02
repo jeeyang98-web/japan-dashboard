@@ -68,12 +68,8 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       dailyProductQty: pick(ks, "krDailyProductQty") || {},
     },
     product: {
-      TOTAL:
-        pick(p, "productTotal", "totalProduct") ||
-        pick(t, "productTotal") ||
-        {},
-      KR: pick(kp, "product", "krProduct") || kp,
-      JP: pick(p, "product", "jpProduct") || {},
+      KR: { monthly: pick(kp, "monthly") || {} },
+      JP: { monthly: pick(p, "jpProducts") || {} },
     },
     promotion: {
       megawariCampaigns: rows(pick(promo, "megawari", "megawariCampaigns")),

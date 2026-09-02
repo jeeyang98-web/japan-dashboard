@@ -679,23 +679,25 @@ function buildDailyLineSeries(sources: (DailyLineQty | undefined)[], limit = 5):
 }
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
-  const fallback = useMemo(() => {
-    const kr = krSheetData.lineQuantityProducts as Record<string, ProductRow[]>;
-    const jp = jpSheetData.products as Record<string, ProductRow[]>;
-    const monthKeys = Array.from({ length: 12 }, (_, i) => String(i + 1));
-    const total: Record<string, ProductRow[]> = {};
-    monthKeys.forEach((k) => {
-      total[k] = [...(kr[k] || []), ...(jp[k] || [])];
-    });
-    return {
-      KR: buildProductMarketData(kr),
-      JP: buildProductMarketData(jp),
-      TOTAL: buildProductMarketData(total),
-    };
-  }, []);
-  const api = d?.product?.[market];
-  const x =
-    api?.trends?.datasets?.length || api?.cumulative?.length ? api : fallback[market];
+  const fallbackMonthly = useMemo(
+    () => ({
+      KR: krSheetData.lineQuantityProducts as Record<string, ProductRow[]>,
+      JP: jpSheetData.products as Record<string, ProductRow[]>,
+    }),
+    [],
+  );
+  const hasRows = (rows?: Record<string, ProductRow[]>) =>
+    !!rows && Object.values(rows).some((v) => v?.length);
+
+  const krMonthly = hasRows(d?.product?.KR?.monthly) ? d!.product!.KR!.monthly! : fallbackMonthly.KR;
+  const jpMonthly = hasRows(d?.product?.JP?.monthly) ? d!.product!.JP!.monthly! : fallbackMonthly.JP;
+  const monthKeys = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const totalMonthly: Record<string, ProductRow[]> = {};
+  monthKeys.forEach((k) => {
+    totalMonthly[k] = [...(krMonthly[k] || []), ...(jpMonthly[k] || [])];
+  });
+  const monthlyByMarket = { KR: krMonthly, JP: jpMonthly, TOTAL: totalMonthly };
+  const x = buildProductMarketData(monthlyByMarket[market]);
 
   const krDaily = d?.kr?.dailyProductQty;
   const jpDaily = d?.jp?.dailyProductQty;
