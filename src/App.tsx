@@ -698,8 +698,24 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   });
   const monthlyByMarket = { KR: krMonthly, JP: jpMonthly, TOTAL: totalMonthly };
   const x = buildProductMarketData(monthlyByMarket[market]);
-  const krX = buildProductMarketData(krMonthly);
-  const jpX = buildProductMarketData(jpMonthly);
+  const productDataByMarket = {
+    TOTAL: buildProductMarketData(totalMonthly),
+    KR: buildProductMarketData(krMonthly),
+    JP: buildProductMarketData(jpMonthly),
+  };
+  const [top10ChartMarket, setTop10ChartMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
+  const [cumulativeChartMarket, setCumulativeChartMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
+  const [top10TableMarket, setTop10TableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
+  const [cumulativeTableMarket, setCumulativeTableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
+  const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
+    <div className="mini-tabs">
+      {(["TOTAL", "KR", "JP"] as const).map((v) => (
+        <button key={v} className={value === v ? "active" : ""} onClick={() => onChange(v)}>
+          {v}
+        </button>
+      ))}
+    </div>
+  );
 
   const krDaily = d?.kr?.dailyProductQty;
   const jpDaily = d?.jp?.dailyProductQty;
@@ -751,52 +767,32 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           wide
         />
         <ChartCard
-          title={`${m}월 판매량 TOP 10 · KR`}
-          series={productSeries(krX?.monthly?.[String(m)])}
+          title={`${m}월 판매량 TOP 10`}
+          series={productSeries(productDataByMarket[top10ChartMarket]?.monthly?.[String(m)])}
+          actions={marketMiniTabs(top10ChartMarket, setTop10ChartMarket)}
         />
         <ChartCard
-          title={`${m}월 판매량 TOP 10 · JP`}
-          series={productSeries(jpX?.monthly?.[String(m)])}
-        />
-        <ChartCard
-          title="누적 판매량 TOP 10 · KR · 1월~12월"
-          series={productSeries(krX?.cumulative)}
-        />
-        <ChartCard
-          title="누적 판매량 TOP 10 · JP · 1월~12월"
-          series={productSeries(jpX?.cumulative)}
+          title="누적 판매량 TOP 10 · 1월~12월"
+          series={productSeries(productDataByMarket[cumulativeChartMarket]?.cumulative)}
+          actions={marketMiniTabs(cumulativeChartMarket, setCumulativeChartMarket)}
         />
         <DataTable
-          title={`${m}월 상품 순위 · KR`}
-          rows={krX?.monthly?.[String(m)]?.map((v, i) => ({
+          title={`${m}월 상품 순위`}
+          rows={productDataByMarket[top10TableMarket]?.monthly?.[String(m)]?.map((v, i) => ({
             rank: i + 1,
             product: v.name,
             quantity: v.quantity,
           }))}
+          actions={marketMiniTabs(top10TableMarket, setTop10TableMarket)}
         />
         <DataTable
-          title={`${m}월 상품 순위 · JP`}
-          rows={jpX?.monthly?.[String(m)]?.map((v, i) => ({
+          title="누적 상품 순위"
+          rows={productDataByMarket[cumulativeTableMarket]?.cumulative?.map((v, i) => ({
             rank: i + 1,
             product: v.name,
             quantity: v.quantity,
           }))}
-        />
-        <DataTable
-          title="누적 상품 순위 · KR"
-          rows={krX?.cumulative?.map((v, i) => ({
-            rank: i + 1,
-            product: v.name,
-            quantity: v.quantity,
-          }))}
-        />
-        <DataTable
-          title="누적 상품 순위 · JP"
-          rows={jpX?.cumulative?.map((v, i) => ({
-            rank: i + 1,
-            product: v.name,
-            quantity: v.quantity,
-          }))}
+          actions={marketMiniTabs(cumulativeTableMarket, setCumulativeTableMarket)}
         />
       </div>
     </>
