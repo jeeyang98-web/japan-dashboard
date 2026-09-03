@@ -634,18 +634,22 @@ function sumProductRows(rows: ProductRow[], limit?: number): ProductRow[] {
 }
 function buildProductMarketData(monthly: Record<string, ProductRow[]>) {
   const monthKeys = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const mergedMonthly: Record<string, ProductRow[]> = {};
+  monthKeys.forEach((k) => {
+    mergedMonthly[k] = sumProductRows(monthly[k] || []);
+  });
   const top = sumProductRows(monthKeys.flatMap((k) => monthly[k] || []), 5);
   return {
     trends: {
       labels: months,
       datasets: top.map((p, i) => ({
         label: p.name,
-        data: monthKeys.map((k) => (monthly[k] || []).find((row) => row.name === p.name)?.quantity || 0),
+        data: monthKeys.map((k) => mergedMonthly[k].find((row) => row.name === p.name)?.quantity || 0),
         backgroundColor: productChartColors[i % productChartColors.length],
         borderColor: productChartColors[i % productChartColors.length],
       })),
     } as Series,
-    monthly,
+    monthly: mergedMonthly,
     cumulative: sumProductRows(monthKeys.flatMap((k) => monthly[k] || []), 10),
   };
 }
