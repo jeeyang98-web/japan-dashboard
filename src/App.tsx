@@ -698,6 +698,8 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   });
   const monthlyByMarket = { KR: krMonthly, JP: jpMonthly, TOTAL: totalMonthly };
   const x = buildProductMarketData(monthlyByMarket[market]);
+  const krX = buildProductMarketData(krMonthly);
+  const jpX = buildProductMarketData(jpMonthly);
 
   const krDaily = d?.kr?.dailyProductQty;
   const jpDaily = d?.jp?.dailyProductQty;
@@ -749,24 +751,48 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           wide
         />
         <ChartCard
-          title={`${m}월 판매량 TOP 10`}
-          series={productSeries(x?.monthly?.[String(m)])}
+          title={`${m}월 판매량 TOP 10 · KR`}
+          series={productSeries(krX?.monthly?.[String(m)])}
         />
         <ChartCard
-          title="누적 판매량 TOP 10 · 1월~12월"
-          series={productSeries(x?.cumulative)}
+          title={`${m}월 판매량 TOP 10 · JP`}
+          series={productSeries(jpX?.monthly?.[String(m)])}
+        />
+        <ChartCard
+          title="누적 판매량 TOP 10 · KR · 1월~12월"
+          series={productSeries(krX?.cumulative)}
+        />
+        <ChartCard
+          title="누적 판매량 TOP 10 · JP · 1월~12월"
+          series={productSeries(jpX?.cumulative)}
         />
         <DataTable
-          title={`${m}월 상품 순위`}
-          rows={x?.monthly?.[String(m)]?.map((v, i) => ({
+          title={`${m}월 상품 순위 · KR`}
+          rows={krX?.monthly?.[String(m)]?.map((v, i) => ({
             rank: i + 1,
             product: v.name,
             quantity: v.quantity,
           }))}
         />
         <DataTable
-          title="누적 상품 순위"
-          rows={x?.cumulative?.map((v, i) => ({
+          title={`${m}월 상품 순위 · JP`}
+          rows={jpX?.monthly?.[String(m)]?.map((v, i) => ({
+            rank: i + 1,
+            product: v.name,
+            quantity: v.quantity,
+          }))}
+        />
+        <DataTable
+          title="누적 상품 순위 · KR"
+          rows={krX?.cumulative?.map((v, i) => ({
+            rank: i + 1,
+            product: v.name,
+            quantity: v.quantity,
+          }))}
+        />
+        <DataTable
+          title="누적 상품 순위 · JP"
+          rows={jpX?.cumulative?.map((v, i) => ({
             rank: i + 1,
             product: v.name,
             quantity: v.quantity,
