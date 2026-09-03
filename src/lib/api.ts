@@ -23,6 +23,8 @@ function endpointUrl(api: ApiName, month: number, force: boolean) {
   if (force) url.searchParams.set("force", "1");
   return url.toString();
 }
+const REQUEST_TIMEOUT_MS = 30000;
+
 async function request(
   api: ApiName,
   month: number,
@@ -30,7 +32,13 @@ async function request(
 ): Promise<JsonObject> {
   const url = endpointUrl(api, month, force);
   if (!force && responseCache.has(url)) return responseCache.get(url)!;
-  const pending = fetch(url, { method: "GET", redirect: "follow" })
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const pending = fetch(url, {
+    method: "GET",
+    redirect: "follow",
+    signal: controller.signal,
+  })
     .then(async (response) => {
       const type = response.headers.get("content-type") || "";
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -45,15 +53,20 @@ async function request(
     })
     .catch((error) => {
       responseCache.delete(url);
+      const isTimeout = error?.name === "AbortError";
       console.error(`[Dashboard API] ${api} endpoint failed`, {
         endpoint: url,
         month,
         error,
+        timeout: isTimeout,
       });
       throw new Error(
-        `${api}: ${error instanceof Error ? error.message : String(error)}`,
+        isTimeout
+          ? `${api}: 응답이 ${REQUEST_TIMEOUT_MS / 1000}초 넘게 없어 요청을 중단했습니다. 네트워크 상태를 확인해주세요.`
+          : `${api}: ${error instanceof Error ? error.message : String(error)}`,
       );
-    });
+    })
+    .finally(() => clearTimeout(timeoutId));
   responseCache.set(url, pending);
   return pending;
 }
