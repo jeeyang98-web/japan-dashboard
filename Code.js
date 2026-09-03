@@ -1856,3 +1856,153 @@ function dashboardJson_(value) {
     .createTextOutput(JSON.stringify(value))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// ---------------------------------------------------------------------
+// Supabase sync
+//
+// The dashboard used to make the frontend wait on a live Sheets read on
+// every page load. Instead, whenever the sheets change, we recompute the
+// same handlers serveDashboardApi_ uses and push the result into a
+// Supabase table (dashboard_cache). FastAPI then only ever reads that
+// table, so a page load is a single indexed Postgres lookup instead of
+// a multi-second SpreadsheetApp.openById()+getRange() chain.
+//
+// One-time setup: set SUPABASE_URL / SUPABASE_SERVICE_KEY as Script
+// Properties (Project Settings > Script Properties), then run
+// installSupabaseSyncTrigger_ once from the editor.
+// ---------------------------------------------------------------------
+
+var SUPABASE_SYNC_HANDLERS_ = {
+  platform: function (month) { return getPlatformData(month); },
+  total: function (month) { return getTotalBusinessData(month); },
+  krProduct: function (month) { return getKoreaProductData(month); },
+  krProductSales: function (month) { return getKoreaProductSalesData(month); },
+  krFunnel: function (month) { return getKoreaFunnelData(month); },
+  // These two ignore month entirely (same as in serveDashboardApi_), so
+  // syncAllToSupabase_ only computes them once per run and reuses the
+  // result across every month it writes.
+  promotion: function () { return getPromotionData_(); },
+  jpFunnel: function () { return getJpDailyFunnel_(); },
+};
+var SUPABASE_MONTH_INDEPENDENT_APIS_ = ["promotion", "jpFunnel"];
+
+function getSupabaseConfig_() {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty("SUPABASE_URL");
+  var serviceKey = props.getProperty("SUPABASE_SERVICE_KEY");
+  if (!url || !serviceKey) {
+    throw new Error("SUPABASE_URL / SUPABASE_SERVICE_KEY script properties are not set.");
+  }
+  return { url: url, serviceKey: serviceKey };
+}
+
+function upsertDashboardCache_(api, month, data) {
+  var cfg = getSupabaseConfig_();
+  var url = cfg.url + "/rest/v1/dashboard_cache?on_conflict=api,month";
+  var payload = { api: api, month: month, data: data, updated_at: new Date().toISOString() };
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      apikey: cfg.serviceKey,
+      Authorization: "Bearer " + cfg.serviceKey,
+      Prefer: "resolution=merge-duplicates",
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+
+  var code = res.getResponseCode();
+  if (code >= 300) {
+    throw new Error("Supabase upsert failed for " + api + "/" + month + " (" + code + "): " + res.getContentText());
+  }
+}
+
+// Recomputes every api for the given months and pushes each into Supabase.
+// One handler failing (e.g. a transient Sheets error) is logged and skipped
+// rather than aborting the whole run, so a bad month doesn't block the rest.
+function syncAllToSupabase_(months) {
+  var monthIndependentCache_ = {};
+
+  Object.keys(SUPABASE_SYNC_HANDLERS_).forEach(function (api) {
+    var isMonthIndependent = SUPABASE_MONTH_INDEPENDENT_APIS_.indexOf(api) !== -1;
+
+    months.forEach(function (month) {
+      try {
+        var data;
+        if (isMonthIndependent) {
+          if (!(api in monthIndependentCache_)) {
+            monthIndependentCache_[api] = SUPABASE_SYNC_HANDLERS_[api]();
+          }
+          data = monthIndependentCache_[api];
+        } else {
+          data = SUPABASE_SYNC_HANDLERS_[api](month);
+        }
+        upsertDashboardCache_(api, month, data);
+      } catch (err) {
+        Logger.log("syncAllToSupabase_ failed for " + api + "/" + month + ": " + err);
+      }
+    });
+  });
+}
+
+function syncCurrentMonthToSupabase_() {
+  syncAllToSupabase_([new Date().getMonth() + 1]);
+}
+
+function syncAllMonthsToSupabase_() {
+  var months = [];
+  for (var m = 1; m <= 12; m++) months.push(m);
+  syncAllToSupabase_(months);
+}
+
+// Installable onEdit trigger handler: just marks "something changed" and
+// when. The actual (expensive, ~30-60s) sync runs from a separate 1-minute
+// time-driven trigger below, debounced so a burst of edits collapses into
+// one sync instead of one per keystroke.
+function onEditInstallable_(e) {
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty("supabaseSyncDirty", "1");
+  props.setProperty("supabaseSyncLastEditMs", String(Date.now()));
+}
+
+var SUPABASE_SYNC_DEBOUNCE_MS_ = 20000;
+
+function checkAndSyncIfDirty_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty("supabaseSyncDirty") !== "1") return;
+
+  var lastEdit = Number(props.getProperty("supabaseSyncLastEditMs") || "0");
+  if (Date.now() - lastEdit < SUPABASE_SYNC_DEBOUNCE_MS_) return; // edits still settling, wait for the next tick
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return; // a sync is already running
+  try {
+    props.setProperty("supabaseSyncDirty", "0");
+    syncCurrentMonthToSupabase_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// One-time setup - run this once from the Apps Script editor after setting
+// the SUPABASE_URL / SUPABASE_SERVICE_KEY script properties. Safe to re-run
+// (it clears its own previously-created triggers first).
+function installSupabaseSyncTrigger_() {
+  var ownHandlers = ["onEditInstallable_", "checkAndSyncIfDirty_", "syncAllMonthsToSupabase_"];
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (ownHandlers.indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
+  });
+
+  ScriptApp.newTrigger("onEditInstallable_").forSpreadsheet(SPREADSHEET_ID).onEdit().create();
+  ScriptApp.newTrigger("onEditInstallable_").forSpreadsheet(KR_SPREADSHEET_ID).onEdit().create();
+
+  ScriptApp.newTrigger("checkAndSyncIfDirty_").timeBased().everyMinutes(1).create();
+
+  // Catches months other than the current one (e.g. a corrected past-month
+  // figure) that the onEdit-driven sync intentionally skips to stay fast.
+  ScriptApp.newTrigger("syncAllMonthsToSupabase_").timeBased().everyDays(1).atHour(3).create();
+
+  Logger.log("Supabase sync triggers installed.");
+}
