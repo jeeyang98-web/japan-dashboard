@@ -1,4 +1,7 @@
 const BASE_URL = import.meta.env.VITE_GAS_API_URL as string | undefined;
+// dashboard-api (FastAPI, reads Supabase's dashboard_cache) base URL, e.g.
+// http://localhost:8000. When set, this takes priority over VITE_GAS_API_URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 export type ApiName =
   "platform" | "total" | "krProduct" | "krProductSales" | "krFunnel" | "promotion" | "jpFunnel";
 export type JsonObject = Record<string, any>;
@@ -14,7 +17,14 @@ export type DashboardApiBundle = {
 };
 const responseCache = new Map<string, Promise<JsonObject>>();
 function endpointUrl(api: ApiName, month: number, force: boolean) {
-  if (!BASE_URL) throw new Error("VITE_GAS_API_URL is not configured.");
+  if (API_BASE_URL) {
+    // dashboard-api only ever serves Supabase's cache (kept fresh by Apps
+    // Script's own sync triggers), so there's no live-Sheets read to force.
+    const url = new URL(`${API_BASE_URL.replace(/\/$/, "")}/api/${api}`);
+    url.searchParams.set("month", String(month));
+    return url.toString();
+  }
+  if (!BASE_URL) throw new Error("Neither VITE_API_BASE_URL nor VITE_GAS_API_URL is configured.");
   const url = new URL(BASE_URL);
   url.searchParams.set("api", api);
   url.searchParams.set("month", String(month));
@@ -88,7 +98,7 @@ export async function fetchDashboardBundle(
   month: number,
   force = false,
 ): Promise<DashboardApiBundle> {
-  if (!BASE_URL) {
+  if (!BASE_URL && !API_BASE_URL) {
     return {
       month,
       platform: {},
