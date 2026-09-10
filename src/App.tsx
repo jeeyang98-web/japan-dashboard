@@ -566,11 +566,15 @@ function Executive({
             { label: "Actual", data: x?.monthlySales, color: "#5a4ff3" },
           ])}
         />
-        <ChartCard
-          title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
-          series={dailyKpiSeries}
-          kind="line"
-        />
+        {market === "KR" ? (
+          <ChartCard title="채널별 매출" series={channelSeries(d?.total?.channels, m)} />
+        ) : (
+          <ChartCard
+            title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
+            series={dailyKpiSeries}
+            kind="line"
+          />
+        )}
       </div>
       <section className="card wide">
         <h3>{market} KPI & Funnel</h3>
@@ -855,6 +859,19 @@ function Promotion({ d }: { d: DashboardData | null }) {
       </div>
     </>
   );
+}
+function channelSeries(channels?: Record<string, number[]>, m?: number): Series | undefined {
+  if (!channels || !m) return undefined;
+  const entries = Object.entries(channels)
+    .map(([name, arr]) => ({ name, value: arr?.[m - 1] || 0 }))
+    .filter((e) => e.value > 0)
+    .sort((a, b) => b.value - a.value);
+  return entries.length
+    ? series(
+        entries.map((e) => e.name),
+        [{ label: "매출액", data: entries.map((e) => e.value), color: "#5a4ff3" }],
+      )
+    : undefined;
 }
 function productSeries(rows?: ProductRow[]): Series | undefined {
   return rows?.length
