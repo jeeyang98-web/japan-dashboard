@@ -567,7 +567,7 @@ function Executive({
           ])}
         />
         {market === "KR" ? (
-          <ChartCard title="채널별 매출" series={channelSeries(x?.channelRevenue)} />
+          <ChartCard title="채널별 월별 매출 추이" series={channelTrendSeries(x?.channelRevenue)} kind="line" wide />
         ) : (
           <ChartCard
             title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
@@ -860,16 +860,27 @@ function Promotion({ d }: { d: DashboardData | null }) {
     </>
   );
 }
-function channelSeries(channelRevenue?: { channels: string[]; revenue: number[] }): Series | undefined {
-  if (!channelRevenue?.channels?.length) return undefined;
-  const entries = channelRevenue.channels
-    .map((name, i) => ({ name, value: channelRevenue.revenue[i] || 0 }))
-    .filter((e) => e.value > 0)
-    .sort((a, b) => b.value - a.value);
-  return entries.length
+const CHANNEL_COLORS = [
+  "#5a4ff3", "#24b47e", "#f5a623", "#ef4c8b", "#00b8d9",
+  "#8777d9", "#ff7452", "#36b37e", "#ffab00", "#6554c0",
+  "#00c7e6", "#de350b",
+];
+function channelTrendSeries(channelRevenue?: Record<string, number[]>): Series | undefined {
+  if (!channelRevenue) return undefined;
+  const names = Object.keys(channelRevenue)
+    .filter((name) => channelRevenue[name]?.some((v) => v > 0))
+    .sort((a, b) => {
+      const total = (arr: number[]) => arr.reduce((s, v) => s + v, 0);
+      return total(channelRevenue[b]) - total(channelRevenue[a]);
+    });
+  return names.length
     ? series(
-        entries.map((e) => e.name),
-        [{ label: "매출액", data: entries.map((e) => e.value), color: "#5a4ff3" }],
+        months,
+        names.map((name, i) => ({
+          label: name,
+          data: channelRevenue[name],
+          color: CHANNEL_COLORS[i % CHANNEL_COLORS.length],
+        })),
       )
     : undefined;
 }
