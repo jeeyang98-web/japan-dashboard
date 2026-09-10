@@ -1480,25 +1480,27 @@ function getKoreaFunnelData(month) {
     orders: ordersByMonth,
     funnel: funnel,
     dailyByMonth: getKrDailySalesByMonth_(dailyRaw),
-    channelRevenue: getKrChannelRevenueForMonth_(dailyRaw, month)
+    channelRevenue: getKrChannelRevenueByMonth_(dailyRaw)
   };
 }
 
 /**
- * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 일자별 로그에서 지정한 달의
- * 채널별 매출액 합계를 구합니다. getKrChannelRevenue_()(월마감 채널 요약,
- * Total 페이지에서 사용)와 달리, 이 시트는 매일 실시간으로 쌓이기 때문에
- * 아직 월마감이 안 된 진행 중인 달(예: 이번 달)도 값이 비지 않습니다 —
- * KR Executive의 "채널별 매출" 카드가 이 함수를 씁니다.
+ * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 일자별 로그에서 채널별 매출액을
+ * 월별로 합산합니다({채널명: [1월값, ..., 12월값]}). getKrChannelRevenue_()
+ * (월마감 채널 요약, Total 페이지에서 사용)와 달리 이 시트는 매일 실시간으로
+ * 쌓이기 때문에 아직 월마감이 안 된 진행 중인 달(예: 이번 달)도 값이 비지
+ * 않습니다 — KR Executive의 "월별 매출 추이" 카드가 이 함수를 씁니다.
  *
  * 채널 열 구성이 매달 손으로 다시 짜여 순서/개수가 바뀌므로(파일 상단
  * readKrDailySheetRaw_ 주석 참고) 채널명을 하드코딩하지 않고, 헤더 행
  * 바로 위 행(채널명, 여러 열에 병합)을 왼쪽에서 오른쪽으로 forward-fill
  * 해서 각 "매출액" 열이 어느 채널 소속인지 그때그때 읽어냅니다. "국내
- * 합계" 열을 만나면(그 뒤로 일본/합계 구간) 읽기를 멈춥니다.
+ * 합계" 열을 만나면(그 뒤로 일본/합계 구간) 읽기를 멈춥니다. (다른 월별
+ * 합산 함수들과 마찬가지로 한 해 전체를 지금 시점의 열 구성 하나로 읽으므로,
+ * 채널 열이 연중에 재배치됐다면 과거 달 라벨이 어긋날 수 있습니다.)
  */
-function getKrChannelRevenueForMonth_(raw, month) {
-  const result = { channels: [], revenue: [] };
+function getKrChannelRevenueByMonth_(raw) {
+  const result = {};
   try {
     const data = raw || readKrDailySheetRaw_();
     const values = data.values;
@@ -1525,16 +1527,17 @@ function getKrChannelRevenueForMonth_(raw, month) {
     }
     if (!revenueCols.length) return result;
 
-    const totals = revenueCols.map(() => 0);
+    revenueCols.forEach(rc => { result[rc.name] = new Array(12).fill(0); });
+
     for (let r = headerRow + 1; r < values.length; r++) {
       const date = String(values[r][0] || "");
       const match = date.match(/^\d{4}-(\d{2})-\d{2}/);
-      if (!match || Number(match[1]) !== Number(month)) continue;
-      revenueCols.forEach((rc, i) => { totals[i] += toNumber_(values[r][rc.col]); });
+      if (!match) continue;
+      const m = Number(match[1]);
+      if (m < 1 || m > 12) continue;
+      revenueCols.forEach(rc => { result[rc.name][m - 1] += toNumber_(values[r][rc.col]); });
     }
 
-    result.channels = revenueCols.map(rc => rc.name);
-    result.revenue = totals;
     return result;
   } catch (err) {
     return result;
