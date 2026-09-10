@@ -66,6 +66,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       products: pick(ks, "products", "productSalesByMonth"),
       funnel: pick(kf, "funnel", "funnelByMonth", "dailyKpi"),
       dailyProductQty: pick(ks, "krDailyProductQty") || {},
+      channelRevenue: pick(kf, "channelRevenue"),
     },
     product: {
       KR: { monthly: pick(kp, "monthly") || {} },
