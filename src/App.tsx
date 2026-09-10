@@ -567,7 +567,7 @@ function Executive({
           ])}
         />
         {market === "KR" ? (
-          <ChartCard title="채널별 월별 매출 추이" series={channelTrendSeries(x?.channelRevenue)} kind="line" wide />
+          <ChartCard title="채널별 월별 매출 추이(매출액+배송비)" series={channelTrendSeries(x?.channelRevenue)} kind="line" wide />
         ) : (
           <ChartCard
             title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
