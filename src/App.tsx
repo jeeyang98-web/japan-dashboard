@@ -567,7 +567,7 @@ function Executive({
           ])}
         />
         {market === "KR" ? (
-          <ChartCard title="채널별 매출" series={channelSeries(d?.total?.channels, m)} />
+          <ChartCard title="채널별 매출" series={channelSeries(x?.channelRevenue)} />
         ) : (
           <ChartCard
             title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
@@ -860,10 +860,10 @@ function Promotion({ d }: { d: DashboardData | null }) {
     </>
   );
 }
-function channelSeries(channels?: Record<string, number[]>, m?: number): Series | undefined {
-  if (!channels || !m) return undefined;
-  const entries = Object.entries(channels)
-    .map(([name, arr]) => ({ name, value: arr?.[m - 1] || 0 }))
+function channelSeries(channelRevenue?: { channels: string[]; revenue: number[] }): Series | undefined {
+  if (!channelRevenue?.channels?.length) return undefined;
+  const entries = channelRevenue.channels
+    .map((name, i) => ({ name, value: channelRevenue.revenue[i] || 0 }))
     .filter((e) => e.value > 0)
     .sort((a, b) => b.value - a.value);
   return entries.length

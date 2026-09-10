@@ -34,6 +34,7 @@ export type DashboardData = {
     products?: Record<string, ProductRow[]>;
     funnel?: Record<string, number>[];
     dailyProductQty?: DailyLineQty;
+    channelRevenue?: { channels: string[]; revenue: number[] };
   };
   jp?: {
     monthlySales: number[];
