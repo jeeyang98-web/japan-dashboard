@@ -1485,19 +1485,23 @@ function getKoreaFunnelData(month) {
 }
 
 /**
- * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 일자별 로그에서 채널별 매출액을
- * 월별로 합산합니다({채널명: [1월값, ..., 12월값]}). getKrChannelRevenue_()
- * (월마감 채널 요약, Total 페이지에서 사용)와 달리 이 시트는 매일 실시간으로
- * 쌓이기 때문에 아직 월마감이 안 된 진행 중인 달(예: 이번 달)도 값이 비지
- * 않습니다 — KR Executive의 "월별 매출 추이" 카드가 이 함수를 씁니다.
+ * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 일자별 로그에서 채널별
+ * (매출액 + 배송비)를 월별로 합산합니다({채널명: [1월값, ..., 12월값]}).
+ * getKrChannelRevenue_()(월마감 채널 요약, Total 페이지에서 사용)와 달리
+ * 이 시트는 매일 실시간으로 쌓이기 때문에 아직 월마감이 안 된 진행 중인
+ * 달(예: 이번 달)도 값이 비지 않습니다 — KR Executive의 "채널별 월별 매출
+ * 추이(매출액+배송비)" 카드가 이 함수를 씁니다.
  *
  * 채널 열 구성이 매달 손으로 다시 짜여 순서/개수가 바뀌므로(파일 상단
  * readKrDailySheetRaw_ 주석 참고) 채널명을 하드코딩하지 않고, 헤더 행
  * 바로 위 행(채널명, 여러 열에 병합)을 왼쪽에서 오른쪽으로 forward-fill
- * 해서 각 "매출액" 열이 어느 채널 소속인지 그때그때 읽어냅니다. "국내
- * 합계" 열을 만나면(그 뒤로 일본/합계 구간) 읽기를 멈춥니다. (다른 월별
- * 합산 함수들과 마찬가지로 한 해 전체를 지금 시점의 열 구성 하나로 읽으므로,
- * 채널 열이 연중에 재배치됐다면 과거 달 라벨이 어긋날 수 있습니다.)
+ * 해서 각 "매출액" 열이 어느 채널 소속인지 그때그때 읽어냅니다. 배송비를
+ * 별도로 받는 채널(자사몰/네이버/29CM/카카오 등)은 "매출액" 바로 다음 열이
+ * "배송비"라, 그런 경우에만 같이 더합니다 — 배송비 열이 없는 채널(올리브영,
+ * CJ ENM 등 위탁/입점 채널)은 매출액만 더해집니다. "국내 합계" 열을
+ * 만나면(그 뒤로 일본/합계 구간) 읽기를 멈춥니다. (다른 월별 합산 함수들과
+ * 마찬가지로 한 해 전체를 지금 시점의 열 구성 하나로 읽으므로, 채널 열이
+ * 연중에 재배치됐다면 과거 달 라벨이 어긋날 수 있습니다.)
  */
 function getKrChannelRevenueByMonth_(raw) {
   const result = {};
@@ -1517,17 +1521,19 @@ function getKrChannelRevenueByMonth_(raw) {
       return lastGroup;
     });
 
-    const revenueCols = [];
+    const channelCols = [];
     for (let c = 1; c < subHeader.length; c++) {
       if (String(subHeader[c] || "").trim() !== "매출액") continue;
       const group = groups[c];
       if (!group) continue;
       if (group.indexOf("합계") !== -1) break; // 국내 합계 열부터는 소계/일본 구간
-      revenueCols.push({ name: group, col: c });
+      const cols = [c];
+      if (String(subHeader[c + 1] || "").trim() === "배송비") cols.push(c + 1);
+      channelCols.push({ name: group, cols: cols });
     }
-    if (!revenueCols.length) return result;
+    if (!channelCols.length) return result;
 
-    revenueCols.forEach(rc => { result[rc.name] = new Array(12).fill(0); });
+    channelCols.forEach(cc => { result[cc.name] = new Array(12).fill(0); });
 
     for (let r = headerRow + 1; r < values.length; r++) {
       const date = String(values[r][0] || "");
@@ -1535,7 +1541,9 @@ function getKrChannelRevenueByMonth_(raw) {
       if (!match) continue;
       const m = Number(match[1]);
       if (m < 1 || m > 12) continue;
-      revenueCols.forEach(rc => { result[rc.name][m - 1] += toNumber_(values[r][rc.col]); });
+      channelCols.forEach(cc => {
+        cc.cols.forEach(col => { result[cc.name][m - 1] += toNumber_(values[r][col]); });
+      });
     }
 
     return result;
