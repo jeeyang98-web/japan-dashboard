@@ -324,6 +324,11 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           }
         />
         <ChartCard
+          title="채널별 월별 매출 추이(매출액+배송비)"
+          series={channelTrendSeries(d?.kr?.channelRevenue)}
+          kind="line"
+        />
+        <ChartCard
           title="YTD 월 목표 vs 실매출"
           series={series(months, [
             { label: "전체 목표", data: combinedTargets, color: "#dfe0e8" },
@@ -567,7 +572,7 @@ function Executive({
           ])}
         />
         {market === "KR" ? (
-          <ChartCard title="채널별 월별 매출 추이(매출액+배송비)" series={channelTrendSeries(x?.channelRevenue)} kind="line" wide />
+          <ChartCard title="채널별 월별 매출 추이(매출액+배송비)" series={channelTrendSeries(x?.channelRevenue)} kind="line" />
         ) : (
           <ChartCard
             title={dailyKpiSeries ? "일별 KPI 추이" : "일별 KPI 추이 · 시트 입력 대기"}
