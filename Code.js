@@ -983,7 +983,12 @@ function getKrMonthlyClose_() {
   const sheet = requireSheet_(ss, "월마감");
 
   const section1 = sheet.getRange(5, 26, 12, 10).getDisplayValues();
-  const targetColumn = sheet.getRange(23, 35, 12, 1).getDisplayValues();
+  // "2. 국내 채널별 목표 대비 달성율" 섹션의 "국내 합계" 블록 · "목표 (100억)" 열(AM,
+  // 39번째 열) · 월별 데이터는 24행부터(1월) 시작. 예전엔 AI열(35번째, 시코르 채널의
+  // "목표" 열)을 읽고 있었는데, 이 시트가 담당자 손으로 매달 재구성되면서 실제 국내
+  // 합계 목표 열이 AM으로 밀렸고 AI는 비어 있어 krTargets가 사실상 항상 0이었음
+  // (Apps Script 편집기에서 직접 읽어 확인).
+  const targetColumn = sheet.getRange(24, 39, 12, 1).getDisplayValues();
 
   const monthlyKr = [];
   const impliedRate = [];
