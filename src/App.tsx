@@ -581,54 +581,56 @@ function Executive({
           />
         )}
       </div>
-      <section className="card wide">
-        <h3>{market} KPI & Funnel</h3>
-        <div className="funnel-viz">
-          {funnelStages.map((stage, i) => {
-            const value = Number(stage.value) || 0;
-            const heightPct = stage.value === undefined ? 0 : Math.max(6, Math.round((value / funnelMax) * 100));
-            const prevValue = i > 0 ? Number(funnelStages[i - 1].value) || 0 : null;
-            const stepRate = prevValue ? Math.round((value / prevValue) * 1000) / 10 : null;
-            const t = funnelStages.length > 1 ? i / (funnelStages.length - 1) : 0;
-            const top = mixHex("#5a4ff3", "#ef4c8b", t);
-            const bottom = mixHex("#5a4ff3", "#ef4c8b", Math.min(1, t + 0.3));
-            return (
-              <div className="funnel-col" key={stage.label}>
-                <span className="funnel-bar-value" style={{ color: top }}>
-                  {stage.value === undefined ? "—" : value.toLocaleString()}
-                </span>
-                <div className="funnel-bar-wrap">
-                  <div className="funnel-bar" style={{ height: `${heightPct}%`, background: `linear-gradient(165deg, ${top}, ${bottom})` }} />
+      {market === "JP" && (
+        <section className="card wide">
+          <h3>{market} KPI & Funnel</h3>
+          <div className="funnel-viz">
+            {funnelStages.map((stage, i) => {
+              const value = Number(stage.value) || 0;
+              const heightPct = stage.value === undefined ? 0 : Math.max(6, Math.round((value / funnelMax) * 100));
+              const prevValue = i > 0 ? Number(funnelStages[i - 1].value) || 0 : null;
+              const stepRate = prevValue ? Math.round((value / prevValue) * 1000) / 10 : null;
+              const t = funnelStages.length > 1 ? i / (funnelStages.length - 1) : 0;
+              const top = mixHex("#5a4ff3", "#ef4c8b", t);
+              const bottom = mixHex("#5a4ff3", "#ef4c8b", Math.min(1, t + 0.3));
+              return (
+                <div className="funnel-col" key={stage.label}>
+                  <span className="funnel-bar-value" style={{ color: top }}>
+                    {stage.value === undefined ? "—" : value.toLocaleString()}
+                  </span>
+                  <div className="funnel-bar-wrap">
+                    <div className="funnel-bar" style={{ height: `${heightPct}%`, background: `linear-gradient(165deg, ${top}, ${bottom})` }} />
+                  </div>
+                  <div className="funnel-step-rate">
+                    {stepRate !== null ? (
+                      <>
+                        단계 전환율<br /><b>{stepRate}%</b>
+                      </>
+                    ) : (
+                      <>&nbsp;</>
+                    )}
+                  </div>
                 </div>
-                <div className="funnel-step-rate">
-                  {stepRate !== null ? (
-                    <>
-                      단계 전환율<br /><b>{stepRate}%</b>
-                    </>
-                  ) : (
-                    <>&nbsp;</>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="funnel-steps-row">
-          <div className="funnel-steps-line" />
-          {funnelStages.map((stage, i) => (
-            <div className="funnel-step-col" key={stage.label}>
-              <div className="funnel-step-badge">STEP {i + 1}</div>
-              <div className="funnel-step-label">{stage.desc}</div>
-            </div>
-          ))}
-        </div>
-        <div className="funnel-summary">
-          <div className="funnel-summary-badge">
-            <span>전체 주문전환율</span>
-            <strong>{String(funnel["주문전환율"] ?? "—")}</strong>
+              );
+            })}
           </div>
-        </div>
-      </section>
+          <div className="funnel-steps-row">
+            <div className="funnel-steps-line" />
+            {funnelStages.map((stage, i) => (
+              <div className="funnel-step-col" key={stage.label}>
+                <div className="funnel-step-badge">STEP {i + 1}</div>
+                <div className="funnel-step-label">{stage.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div className="funnel-summary">
+            <div className="funnel-summary-badge">
+              <span>전체 주문전환율</span>
+              <strong>{String(funnel["주문전환율"] ?? "—")}</strong>
+            </div>
+          </div>
+        </section>
+      )}
     </>
   );
 }
