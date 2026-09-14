@@ -932,7 +932,7 @@ function getKrProductSheetMeta_(sheet) {
  * 자기 fallback 루프에서 부를 때 이미 계산해 둔 걸 그대로 넘겨줍니다).
  */
 function getKrDailyLineQtyByMonth_(month, sheet, meta) {
-  const empty = { labels: [], series: {} };
+  const empty = { labels: [], series: {}, bySku: {} };
   try {
     sheet = sheet || findKrProductSheet_();
     if (!sheet) return empty;
@@ -956,16 +956,25 @@ function getKrDailyLineQtyByMonth_(month, sheet, meta) {
     const data = sheet.getRange(7, 1, numRows, maxCol).getDisplayValues();
 
     const series = {};
+    const bySku = {}; // { 라인명: { 제품명(SKU): [일별 수량] } } - Product 페이지 드릴다운용
     data.forEach(function (row) {
       const name = String(row[4] || "").trim(); // E열: 라인명
       if (!name) return;
+      const sku = String(row[5] || "").trim() || name; // F열: 제품명(SKU) - 비어있으면 라인명으로 대체
       if (!series[name]) series[name] = new Array(dayCols.length).fill(0);
-      dayCols.forEach(function (d, i) { series[name][i] += toNumber_(row[d.col]); });
+      if (!bySku[name]) bySku[name] = {};
+      if (!bySku[name][sku]) bySku[name][sku] = new Array(dayCols.length).fill(0);
+      dayCols.forEach(function (d, i) {
+        const qty = toNumber_(row[d.col]);
+        series[name][i] += qty;
+        bySku[name][sku][i] += qty;
+      });
     });
 
     return {
       labels: dayCols.map(function (d) { return month + "/" + d.day; }),
-      series: series
+      series: series,
+      bySku: bySku
     };
   } catch (err) {
     return empty;
@@ -1202,7 +1211,7 @@ function readJpProductSheetRaw_() {
 }
 
 function getJpDailyLineQtyByMonth_(month, raw) {
-  const empty = { labels: [], series: {} };
+  const empty = { labels: [], series: {}, bySku: {} };
   const data = raw || readJpProductSheetRaw_();
   const meta = data.meta;
 
@@ -1215,19 +1224,25 @@ function getJpDailyLineQtyByMonth_(month, raw) {
   if (!dayColIdx.length) return empty;
 
   const series = {};
+  const bySku = {}; // { 라인명: { 상품명(SKU): [일별 수량] } } - Product 페이지 드릴다운용
   data.names.forEach(function (name, rowIndex) {
     if (!name || isAggregateRowLabel_(name)) return;
     const line = data.lines[rowIndex];
     if (!line || isAggregateRowLabel_(line)) return;
     if (!series[line]) series[line] = new Array(dayColIdx.length).fill(0);
+    if (!bySku[line]) bySku[line] = {};
+    if (!bySku[line][name]) bySku[line][name] = new Array(dayColIdx.length).fill(0);
     dayColIdx.forEach(function (colIdx, i) {
-      series[line][i] += Number(data.qtyValues[rowIndex][colIdx] || 0);
+      const qty = Number(data.qtyValues[rowIndex][colIdx] || 0);
+      series[line][i] += qty;
+      bySku[line][name][i] += qty;
     });
   });
 
   return {
     labels: dayColIdx.map(function (colIdx) { return month + "/" + Number(meta.dates[colIdx].slice(8, 10)); }),
-    series: series
+    series: series,
+    bySku: bySku
   };
 }
 
