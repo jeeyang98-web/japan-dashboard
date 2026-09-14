@@ -731,6 +731,20 @@ function buildSkuSeries(bySku: Record<string, number[]> | undefined, labels: str
       }
     : undefined;
 }
+// 월별 상품 순위 카드의 "상품별" 모드용 - bySku(라인 -> SKU -> 일별 수량)를 그 달
+// 합계 기준으로 SKU 단위 랭킹으로 펼친다. lineFilter가 "전체"가 아니면 그 라인의
+// SKU만 남긴다.
+function skuRankRows(bySku: Record<string, Record<string, number[]>>, lineFilter: string) {
+  const rows: { line: string; name: string; quantity: number }[] = [];
+  Object.entries(bySku).forEach(([line, skus]) => {
+    if (lineFilter !== "전체" && line !== lineFilter) return;
+    Object.entries(skus).forEach(([sku, data]) => {
+      const quantity = data.reduce((a, b) => a + (b || 0), 0);
+      if (quantity > 0) rows.push({ line, name: sku, quantity });
+    });
+  });
+  return rows.sort((a, b) => b.quantity - a.quantity);
+}
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const fallbackMonthly = useMemo(
@@ -761,6 +775,8 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [cumulativeChartMarket, setCumulativeChartMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const [top10TableMarket, setTop10TableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const [cumulativeTableMarket, setCumulativeTableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
+  const [top10TableMode, setTop10TableMode] = useState<"라인별" | "상품별">("라인별");
+  const [top10TableLine, setTop10TableLine] = useState<string>("전체");
   const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
     <div className="mini-tabs">
       {(["TOTAL", "KR", "JP"] as const).map((v) => (
@@ -778,6 +794,12 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [drilldownLine, setDrilldownLine] = useState<string | null>(null);
   const dailyBySku = mergeBySku(dailySources);
   const skuSeries = drilldownLine ? buildSkuSeries(dailyBySku[drilldownLine], dailyQty?.labels || []) : undefined;
+
+  const top10TableDailySources =
+    top10TableMarket === "KR" ? [krDaily] : top10TableMarket === "JP" ? [jpDaily] : [krDaily, jpDaily];
+  const top10TableBySku = mergeBySku(top10TableDailySources);
+  const top10TableLines = Object.keys(top10TableBySku).sort();
+  const top10TableEffectiveLine = top10TableLines.includes(top10TableLine) ? top10TableLine : "전체";
 
   return (
     <>
@@ -840,13 +862,51 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           actions={marketMiniTabs(cumulativeChartMarket, setCumulativeChartMarket)}
         />
         <DataTable
-          title={`${m}월 상품 순위`}
-          rows={productDataByMarket[top10TableMarket]?.monthly?.[String(m)]?.map((v, i) => ({
-            rank: i + 1,
-            product: v.name,
-            quantity: v.quantity,
-          }))}
-          actions={marketMiniTabs(top10TableMarket, setTop10TableMarket)}
+          title={`${m}월 상품 순위 · ${top10TableMode}`}
+          rows={
+            top10TableMode === "상품별"
+              ? skuRankRows(top10TableBySku, top10TableEffectiveLine).map((v, i) => ({
+                  rank: i + 1,
+                  line: v.line,
+                  product: v.name,
+                  quantity: v.quantity,
+                }))
+              : productDataByMarket[top10TableMarket]?.monthly?.[String(m)]?.map((v, i) => ({
+                  rank: i + 1,
+                  product: v.name,
+                  quantity: v.quantity,
+                }))
+          }
+          actions={
+            <div className="rank-controls">
+              {marketMiniTabs(top10TableMarket, setTop10TableMarket)}
+              <div className="mini-tabs">
+                {(["라인별", "상품별"] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={top10TableMode === v ? "active" : ""}
+                    onClick={() => setTop10TableMode(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              {top10TableMode === "상품별" && (
+                <select
+                  className="rank-line-select"
+                  value={top10TableEffectiveLine}
+                  onChange={(e) => setTop10TableLine(e.target.value)}
+                >
+                  <option value="전체">전체 라인</option>
+                  {top10TableLines.map((line) => (
+                    <option value={line} key={line}>
+                      {line}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          }
         />
         <DataTable
           title="누적 상품 순위"
