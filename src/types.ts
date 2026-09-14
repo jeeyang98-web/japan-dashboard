@@ -11,7 +11,11 @@ export type Series = {
 };
 export type DailyFunnelRow = { date: string; traffic: number; cart: number; orders: number; conversionRate: number };
 export type ProductRow = { name: string; quantity: number };
-export type DailyLineQty = { labels: string[]; series: Record<string, number[]> };
+export type DailyLineQty = {
+  labels: string[];
+  series: Record<string, number[]>;
+  bySku?: Record<string, Record<string, number[]>>;
+};
 export type DashboardData = {
   updatedAt?: string;
   exchangeRates?: Record<string, number>;

@@ -6,4 +6,17 @@ export function ChartCard({title,series,kind='bar',wide=false,stacked=false,acti
 const opts={responsive:true,maintainAspectRatio:false,interaction:{mode:'index' as const,intersect:false},plugins:{legend:{position:'bottom' as const,labels:{usePointStyle:true,boxWidth:8}}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#edf0f4'}}}};
 const dualOpts={...opts,scales:{...opts.scales,y1:{beginAtZero:true,position:'right' as const,grid:{drawOnChartArea:false}}}};
 const stackedOpts={...opts,scales:{x:{...opts.scales.x,stacked:true},y:{...opts.scales.y,stacked:true}}};
+// 범례 클릭으로 드릴다운(카테고리 -> SKU)하고, 범례에 마우스를 올리면 해당 라인만
+// 강조되는 라인차트. onLegendClick이 없으면 클릭은 Chart.js 기본 동작(라인 숨기기/보이기)
+// 그대로 둔다 - SKU까지 내려간 화면에서는 더 내려갈 데가 없어서 굳이 안 막는다.
+export function DrilldownLineChart({title,series,onLegendClick,wide=false,actions}:{title:string;series?:Series;onLegendClick?:(label:string)=>void;wide?:boolean;actions?:ReactNode}){
+  const empty=!series?.labels?.length;
+  const legend:any={position:'bottom' as const,labels:{usePointStyle:true,boxWidth:8},
+    onHover:(_e:unknown,item:any,legendObj:any)=>{const chart=legendObj.chart;chart.data.datasets.forEach((ds:any,i:number)=>{const original=series!.datasets[i]?.borderColor as string;ds.borderColor=i===item.datasetIndex?original:'#d8dbe3';ds.borderWidth=i===item.datasetIndex?3:1.5;});chart.update();},
+    onLeave:(_e:unknown,_item:any,legendObj:any)=>{const chart=legendObj.chart;chart.data.datasets.forEach((ds:any,i:number)=>{ds.borderColor=series!.datasets[i]?.borderColor;ds.borderWidth=2;});chart.update();},
+  };
+  if(onLegendClick)legend.onClick=(_e:unknown,item:any)=>onLegendClick(item.text);
+  const chartOpts={...opts,plugins:{legend}};
+  return <section className={`card chart-card ${wide?'wide':''}`}><div className="chart-card-head"><h3>{title}</h3>{actions}</div><div className="chart">{empty?<div className="empty">No data returned</div>:<Line data={series!} options={chartOpts}/>}</div></section>;
+}
 export function DataTable({title,rows,scroll=false,actions}:{title:string;rows?:Record<string,string|number>[];scroll?:boolean;actions?:ReactNode}){const keys=rows?.length?Object.keys(rows[0]):[];return <section className={`card wide ${scroll?'daily-table':''}`}><div className="chart-card-head"><h3>{title}</h3>{actions}</div>{!rows?.length?<div className="empty">No data returned</div>:<div className="table-wrap"><table><thead><tr>{keys.map(k=><th key={k}>{k}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{keys.map(k=><td key={k}>{r[k]}</td>)}</tr>)}</tbody></table></div>}</section>}

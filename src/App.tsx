@@ -14,7 +14,7 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { ChartCard, DataTable, KPI, money } from "./components";
+import { ChartCard, DataTable, DrilldownLineChart, KPI, money } from "./components";
 import { useDashboard } from "./context/DataContext";
 import {
   promotionSheetUrl,
@@ -692,6 +692,45 @@ function buildDailyLineSeries(sources: (DailyLineQty | undefined)[], limit = 5):
     })),
   };
 }
+// 여러 시장(KR/JP) 소스의 bySku(라인 -> SKU -> 일별 수량)를 라인/SKU 단위로 합산.
+// buildDailyLineSeries와 같은 labels을 쓰므로 같은 sources로 같이 호출해야 날짜가 맞는다.
+function mergeBySku(sources: (DailyLineQty | undefined)[]): Record<string, Record<string, number[]>> {
+  const labels = sources.find((s) => s?.labels?.length)?.labels;
+  const merged: Record<string, Record<string, number[]>> = {};
+  if (!labels?.length) return merged;
+  sources.forEach((s) => {
+    if (!s?.bySku) return;
+    Object.entries(s.bySku).forEach(([line, skus]) => {
+      if (!merged[line]) merged[line] = {};
+      Object.entries(skus).forEach(([sku, data]) => {
+        if (!merged[line][sku]) merged[line][sku] = new Array(labels.length).fill(0);
+        data.forEach((v, i) => {
+          merged[line][sku][i] = (merged[line][sku][i] || 0) + (v || 0);
+        });
+      });
+    });
+  });
+  return merged;
+}
+function buildSkuSeries(bySku: Record<string, number[]> | undefined, labels: string[], limit = 10): Series | undefined {
+  if (!bySku || !labels.length) return undefined;
+  const top = Object.entries(bySku)
+    .map(([name, data]) => ({ name, data, total: data.reduce((a, b) => a + b, 0) }))
+    .filter((t) => t.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+  return top.length
+    ? {
+        labels,
+        datasets: top.map((t, i) => ({
+          label: t.name,
+          data: t.data,
+          backgroundColor: productChartColors[i % productChartColors.length],
+          borderColor: productChartColors[i % productChartColors.length],
+        })),
+      }
+    : undefined;
+}
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const fallbackMonthly = useMemo(
@@ -734,12 +773,11 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
 
   const krDaily = d?.kr?.dailyProductQty;
   const jpDaily = d?.jp?.dailyProductQty;
-  const dailyQty =
-    market === "KR"
-      ? buildDailyLineSeries([krDaily])
-      : market === "JP"
-        ? buildDailyLineSeries([jpDaily])
-        : buildDailyLineSeries([krDaily, jpDaily]);
+  const dailySources = market === "KR" ? [krDaily] : market === "JP" ? [jpDaily] : [krDaily, jpDaily];
+  const dailyQty = buildDailyLineSeries(dailySources);
+  const [drilldownLine, setDrilldownLine] = useState<string | null>(null);
+  const dailyBySku = mergeBySku(dailySources);
+  const skuSeries = drilldownLine ? buildSkuSeries(dailyBySku[drilldownLine], dailyQty?.labels || []) : undefined;
 
   return (
     <>
@@ -760,7 +798,10 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           {(["TOTAL", "KR", "JP"] as const).map((v) => (
             <button
               className={market === v ? "active" : ""}
-              onClick={() => setMarket(v)}
+              onClick={() => {
+                setMarket(v);
+                setDrilldownLine(null);
+              }}
               key={v}
             >
               {v}
@@ -775,10 +816,17 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           kind="line"
           wide
         />
-        <ChartCard
-          title={`${m}월 일간 판매 추이`}
-          series={dailyQty}
-          kind="line"
+        <DrilldownLineChart
+          title={drilldownLine ? `${m}월 ${drilldownLine} · SKU별 일간 판매 추이` : `${m}월 일간 판매 추이`}
+          series={drilldownLine ? skuSeries : dailyQty}
+          onLegendClick={drilldownLine ? undefined : (label) => setDrilldownLine(label)}
+          actions={
+            drilldownLine ? (
+              <button className="drilldown-back" onClick={() => setDrilldownLine(null)}>
+                ← 전체 카테고리 보기
+              </button>
+            ) : undefined
+          }
           wide
         />
         <ChartCard
