@@ -14,7 +14,7 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { ChartCard, DataTable, DrilldownLineChart, KPI, money } from "./components";
+import { ChartCard, DataTable, DrilldownLineChart, KPI, ProductRankTable, money } from "./components";
 import { useDashboard } from "./context/DataContext";
 import {
   promotionSheetUrl,
@@ -775,8 +775,8 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [cumulativeChartMarket, setCumulativeChartMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const [top10TableMarket, setTop10TableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const [cumulativeTableMarket, setCumulativeTableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
-  const [top10TableMode, setTop10TableMode] = useState<"라인별" | "상품별">("라인별");
-  const [top10TableLine, setTop10TableLine] = useState<string>("전체");
+  const [top10TableLineFilter, setTop10TableLineFilter] = useState<Set<string> | null>(null);
+  const [top10TableProductFilter, setTop10TableProductFilter] = useState<Set<string> | null>(null);
   const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
     <div className="mini-tabs">
       {(["TOTAL", "KR", "JP"] as const).map((v) => (
@@ -798,8 +798,21 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const top10TableDailySources =
     top10TableMarket === "KR" ? [krDaily] : top10TableMarket === "JP" ? [jpDaily] : [krDaily, jpDaily];
   const top10TableBySku = mergeBySku(top10TableDailySources);
-  const top10TableLines = Object.keys(top10TableBySku).sort();
-  const top10TableEffectiveLine = top10TableLines.includes(top10TableLine) ? top10TableLine : "전체";
+  const top10TableAllRows = skuRankRows(top10TableBySku, "전체");
+  const top10TableLineOptions = Array.from(new Set(top10TableAllRows.map((r) => r.line))).sort();
+  const top10TableRowsAfterLine = top10TableLineFilter
+    ? top10TableAllRows.filter((r) => top10TableLineFilter.has(r.line))
+    : top10TableAllRows;
+  const top10TableProductOptions = Array.from(new Set(top10TableRowsAfterLine.map((r) => r.name))).sort();
+  const top10TableRowsAfterProduct = top10TableProductFilter
+    ? top10TableRowsAfterLine.filter((r) => top10TableProductFilter.has(r.name))
+    : top10TableRowsAfterLine;
+  const top10TableRows = top10TableRowsAfterProduct.map((v, i) => ({
+    rank: i + 1,
+    line: v.line,
+    product: v.name,
+    quantity: v.quantity,
+  }));
 
   return (
     <>
@@ -861,52 +874,20 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           series={productSeries(productDataByMarket[cumulativeChartMarket]?.cumulative)}
           actions={marketMiniTabs(cumulativeChartMarket, setCumulativeChartMarket)}
         />
-        <DataTable
-          title={`${m}월 상품 순위 · ${top10TableMode}`}
-          rows={
-            top10TableMode === "상품별"
-              ? skuRankRows(top10TableBySku, top10TableEffectiveLine).map((v, i) => ({
-                  rank: i + 1,
-                  line: v.line,
-                  product: v.name,
-                  quantity: v.quantity,
-                }))
-              : productDataByMarket[top10TableMarket]?.monthly?.[String(m)]?.map((v, i) => ({
-                  rank: i + 1,
-                  product: v.name,
-                  quantity: v.quantity,
-                }))
-          }
-          actions={
-            <div className="rank-controls">
-              {marketMiniTabs(top10TableMarket, setTop10TableMarket)}
-              <div className="mini-tabs">
-                {(["라인별", "상품별"] as const).map((v) => (
-                  <button
-                    key={v}
-                    className={top10TableMode === v ? "active" : ""}
-                    onClick={() => setTop10TableMode(v)}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              {top10TableMode === "상품별" && (
-                <select
-                  className="rank-line-select"
-                  value={top10TableEffectiveLine}
-                  onChange={(e) => setTop10TableLine(e.target.value)}
-                >
-                  <option value="전체">전체 라인</option>
-                  {top10TableLines.map((line) => (
-                    <option value={line} key={line}>
-                      {line}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          }
+        <ProductRankTable
+          title={`${m}월 상품 순위`}
+          rows={top10TableRows}
+          actions={marketMiniTabs(top10TableMarket, (v) => {
+            setTop10TableMarket(v);
+            setTop10TableLineFilter(null);
+            setTop10TableProductFilter(null);
+          })}
+          lineOptions={top10TableLineOptions}
+          lineSelected={top10TableLineFilter}
+          onLineChange={setTop10TableLineFilter}
+          productOptions={top10TableProductOptions}
+          productSelected={top10TableProductFilter}
+          onProductChange={setTop10TableProductFilter}
         />
         <DataTable
           title="누적 상품 순위"
