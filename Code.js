@@ -1821,6 +1821,17 @@ function getJpDailyFunnel_() {
   return out;
 }
 
+/**
+ * getJpDailyFunnel_()이 반환하는 전체 일별 전환지표 배열을 지정한 날짜
+ * 범위(startYmd~endYmd)로 잘라낸다. MEGAWARI/MEGAPO 프로모션 기간의
+ * 일별 전환지표(유입자수/장바구니/주문완료/주문전환율)를 뽑아낼 때 씀 -
+ * 같은 "일별 전환지표" 시트를 프로모션 기간만큼만 필터링하는 것.
+ */
+function getJpDailyFunnelInRange_(startYmd, endYmd, all) {
+  var rows = all || getJpDailyFunnel_();
+  return rows.filter(function (r) { return r.date >= startYmd && r.date <= endYmd; });
+}
+
 function getPromotionData_() {
   var ss = getJpSpreadsheet_();
   var sheet = null;
@@ -1841,8 +1852,10 @@ function getPromotionData_() {
   var megawariRange = megawariLatest ? parsePeriodRange_(megawariLatest.period) : null;
   var megapoRange = megapoLatest ? parsePeriodRange_(megapoLatest.period) : null;
 
-  // MEGAWARI/MEGAPO 둘 다 같은 "상품별 매출" 시트를 읽으므로 한 번만 읽어서 공유합니다.
+  // MEGAWARI/MEGAPO 둘 다 같은 "상품별 매출" 시트 / "일별 전환지표" 시트를
+  // 읽으므로 한 번만 읽어서 공유합니다.
   var jpProductRaw = (megawariRange || megapoRange) ? readJpProductSheetRaw_() : null;
+  var jpDailyFunnelAll = (megawariRange || megapoRange) ? getJpDailyFunnel_() : null;
 
   return {
     megawari: megawari,
@@ -1854,7 +1867,13 @@ function getPromotionData_() {
       : { labels: [], series: {} },
     megapoProductDaily: megapoRange
       ? getJpDailyLineQtyByDateRange_(megapoRange.startYmd, megapoRange.endYmd, jpProductRaw)
-      : { labels: [], series: {} }
+      : { labels: [], series: {} },
+    megawariDailyFunnel: megawariRange
+      ? getJpDailyFunnelInRange_(megawariRange.startYmd, megawariRange.endYmd, jpDailyFunnelAll)
+      : [],
+    megapoDailyFunnel: megapoRange
+      ? getJpDailyFunnelInRange_(megapoRange.startYmd, megapoRange.endYmd, jpDailyFunnelAll)
+      : []
   };
 }
 
