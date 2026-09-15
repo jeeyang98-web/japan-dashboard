@@ -94,25 +94,25 @@ export function ProductRankTable({title,rows,actions,lineOptions,lineSelected,on
   return (
     <section className="card wide">
       <div className="chart-card-head"><h3>{title}</h3>{actions}</div>
-      {!rows.length?<div className="empty">No data returned</div>:(
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>rank</th>
-                <ColumnFilterHeader label="line" options={lineOptions} selected={lineSelected} onChange={onLineChange} />
-                <ColumnFilterHeader label="product" options={productOptions} selected={productSelected} onChange={onProductChange} />
-                <th>quantity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r)=>(
-                <tr key={r.rank}><td>{r.rank}</td><td>{r.line}</td><td>{r.product}</td><td>{r.quantity}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>rank</th>
+              <ColumnFilterHeader label="line" options={lineOptions} selected={lineSelected} onChange={onLineChange} />
+              <ColumnFilterHeader label="product" options={productOptions} selected={productSelected} onChange={onProductChange} />
+              <th>quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length?rows.map((r)=>(
+              <tr key={r.rank}><td>{r.rank}</td><td>{r.line}</td><td>{r.product}</td><td>{r.quantity}</td></tr>
+            )):(
+              <tr><td colSpan={4} className="empty-row">필터에 해당하는 데이터가 없습니다.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
