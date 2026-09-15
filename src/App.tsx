@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Box,
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ChartCard, DataTable, DrilldownLineChart, KPI, ProductRankTable, money } from "./components";
 import { useDashboard } from "./context/DataContext";
+import { fetchKrProductSalesData, fetchPlatformData } from "./lib/api";
 import {
   promotionSheetUrl,
   megawariCampaigns,
@@ -745,6 +746,68 @@ function skuRankRows(bySku: Record<string, Record<string, number[]>>, lineFilter
   });
   return rows.sort((a, b) => b.quantity - a.quantity);
 }
+type SkuTotals = Record<string, Record<string, number>>;
+// 특정 달의 bySku(라인 -> SKU -> 일별 수량)를 라인/SKU별 합계로 접는다 -
+// 누적(연간) 상품별 랭킹은 날짜별 배열이 아니라 총합만 있으면 되기 때문.
+function sumBySkuTotals(sources: (DailyLineQty | undefined)[]): SkuTotals {
+  const totals: SkuTotals = {};
+  sources.forEach((s) => {
+    if (!s?.bySku) return;
+    Object.entries(s.bySku).forEach(([line, skus]) => {
+      if (!totals[line]) totals[line] = {};
+      Object.entries(skus).forEach(([sku, data]) => {
+        const sum = data.reduce((a, b) => a + (b || 0), 0);
+        totals[line][sku] = (totals[line][sku] || 0) + sum;
+      });
+    });
+  });
+  return totals;
+}
+function mergeSkuTotals(sources: (SkuTotals | undefined)[]): SkuTotals {
+  const merged: SkuTotals = {};
+  sources.forEach((s) => {
+    if (!s) return;
+    Object.entries(s).forEach(([line, skus]) => {
+      if (!merged[line]) merged[line] = {};
+      Object.entries(skus).forEach(([sku, qty]) => {
+        merged[line][sku] = (merged[line][sku] || 0) + qty;
+      });
+    });
+  });
+  return merged;
+}
+function skuTotalRankRows(totals: SkuTotals, lineFilter: string) {
+  const rows: { line: string; name: string; quantity: number }[] = [];
+  Object.entries(totals).forEach(([line, skus]) => {
+    if (lineFilter !== "전체" && line !== lineFilter) return;
+    Object.entries(skus).forEach(([sku, quantity]) => {
+      if (quantity > 0) rows.push({ line, name: sku, quantity });
+    });
+  });
+  return rows.sort((a, b) => b.quantity - a.quantity);
+}
+// 누적 상품 순위의 "상품별" 모드용 - 12개월치 krProductSales/platform을 모두
+// 불러와 SKU 단위 연간 합계를 만든다. 월별 API 응답은 lib/api의 캐시를
+// 그대로 타므로, 이미 로드된 달(현재 선택된 월 등)은 재요청하지 않는다.
+async function fetchYearlyBySku(): Promise<{ KR: SkuTotals; JP: SkuTotals }> {
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const perMonth = await Promise.all(
+    months.map(async (mo) => {
+      const [ks, p] = await Promise.all([
+        fetchKrProductSalesData(mo).catch(() => ({})),
+        fetchPlatformData(mo).catch(() => ({})),
+      ]);
+      return {
+        krDaily: (ks as { krDailyProductQty?: DailyLineQty })?.krDailyProductQty,
+        jpDaily: (p as { jpDailyProductQty?: DailyLineQty })?.jpDailyProductQty,
+      };
+    }),
+  );
+  return {
+    KR: sumBySkuTotals(perMonth.map((r) => r.krDaily)),
+    JP: sumBySkuTotals(perMonth.map((r) => r.jpDaily)),
+  };
+}
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const fallbackMonthly = useMemo(
@@ -778,6 +841,18 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [top10TableLineFilter, setTop10TableLineFilter] = useState<Set<string> | null>(null);
   const [top10TableProductFilter, setTop10TableProductFilter] = useState<Set<string> | null>(null);
   const [top10TableMode, setTop10TableMode] = useState<"라인별" | "상품별">("라인별");
+  const [cumulativeTableMode, setCumulativeTableMode] = useState<"라인별" | "상품별">("라인별");
+  const [cumulativeTableLineFilter, setCumulativeTableLineFilter] = useState<Set<string> | null>(null);
+  const [cumulativeTableProductFilter, setCumulativeTableProductFilter] = useState<Set<string> | null>(null);
+  const [cumulativeSkuData, setCumulativeSkuData] = useState<{ KR: SkuTotals; JP: SkuTotals } | null>(null);
+  const [cumulativeSkuLoading, setCumulativeSkuLoading] = useState(false);
+  useEffect(() => {
+    if (cumulativeTableMode !== "상품별" || cumulativeSkuData || cumulativeSkuLoading) return;
+    setCumulativeSkuLoading(true);
+    fetchYearlyBySku()
+      .then(setCumulativeSkuData)
+      .finally(() => setCumulativeSkuLoading(false));
+  }, [cumulativeTableMode, cumulativeSkuData, cumulativeSkuLoading]);
   const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
     <div className="mini-tabs">
       {(["TOTAL", "KR", "JP"] as const).map((v) => (
@@ -809,6 +884,28 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
     ? top10TableRowsAfterLine.filter((r) => top10TableProductFilter.has(r.name))
     : top10TableRowsAfterLine;
   const top10TableRows = top10TableRowsAfterProduct.map((v, i) => ({
+    rank: i + 1,
+    line: v.line,
+    product: v.name,
+    quantity: v.quantity,
+  }));
+
+  const cumulativeTableSkuTotals =
+    cumulativeTableMarket === "KR"
+      ? cumulativeSkuData?.KR
+      : cumulativeTableMarket === "JP"
+        ? cumulativeSkuData?.JP
+        : mergeSkuTotals([cumulativeSkuData?.KR, cumulativeSkuData?.JP]);
+  const cumulativeTableAllRows = skuTotalRankRows(cumulativeTableSkuTotals || {}, "전체");
+  const cumulativeTableLineOptions = Array.from(new Set(cumulativeTableAllRows.map((r) => r.line))).sort();
+  const cumulativeTableRowsAfterLine = cumulativeTableLineFilter
+    ? cumulativeTableAllRows.filter((r) => cumulativeTableLineFilter.has(r.line))
+    : cumulativeTableAllRows;
+  const cumulativeTableProductOptions = Array.from(new Set(cumulativeTableRowsAfterLine.map((r) => r.name))).sort();
+  const cumulativeTableRowsAfterProduct = cumulativeTableProductFilter
+    ? cumulativeTableRowsAfterLine.filter((r) => cumulativeTableProductFilter.has(r.name))
+    : cumulativeTableRowsAfterLine;
+  const cumulativeTableRows = cumulativeTableRowsAfterProduct.map((v, i) => ({
     rank: i + 1,
     line: v.line,
     product: v.name,
@@ -924,15 +1021,64 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
             onProductChange={setTop10TableProductFilter}
           />
         )}
-        <DataTable
-          title="누적 상품 순위"
-          rows={productDataByMarket[cumulativeTableMarket]?.cumulative?.map((v, i) => ({
-            rank: i + 1,
-            product: v.name,
-            quantity: v.quantity,
-          }))}
-          actions={marketMiniTabs(cumulativeTableMarket, setCumulativeTableMarket)}
-        />
+        {cumulativeTableMode === "라인별" ? (
+          <DataTable
+            title="누적 상품 순위"
+            rows={productDataByMarket[cumulativeTableMarket]?.cumulative?.map((v, i) => ({
+              rank: i + 1,
+              product: v.name,
+              quantity: v.quantity,
+            }))}
+            actions={
+              <div className="rank-controls">
+                {marketMiniTabs(cumulativeTableMarket, setCumulativeTableMarket)}
+                <div className="mini-tabs">
+                  {(["라인별", "상품별"] as const).map((v) => (
+                    <button
+                      key={v}
+                      className={cumulativeTableMode === v ? "active" : ""}
+                      onClick={() => setCumulativeTableMode(v)}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+          />
+        ) : (
+          <ProductRankTable
+            title="누적 상품 순위"
+            rows={cumulativeTableRows}
+            loading={cumulativeSkuLoading && !cumulativeSkuData}
+            actions={
+              <div className="rank-controls">
+                {marketMiniTabs(cumulativeTableMarket, (v) => {
+                  setCumulativeTableMarket(v);
+                  setCumulativeTableLineFilter(null);
+                  setCumulativeTableProductFilter(null);
+                })}
+                <div className="mini-tabs">
+                  {(["라인별", "상품별"] as const).map((v) => (
+                    <button
+                      key={v}
+                      className={cumulativeTableMode === v ? "active" : ""}
+                      onClick={() => setCumulativeTableMode(v)}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+            lineOptions={cumulativeTableLineOptions}
+            lineSelected={cumulativeTableLineFilter}
+            onLineChange={setCumulativeTableLineFilter}
+            productOptions={cumulativeTableProductOptions}
+            productSelected={cumulativeTableProductFilter}
+            onProductChange={setCumulativeTableProductFilter}
+          />
+        )}
       </div>
     </>
   );

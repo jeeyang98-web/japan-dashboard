@@ -89,12 +89,13 @@ function ColumnFilterHeader({label,options,selected,onChange}:{label:string;opti
     </th>
   );
 }
-export function ProductRankTable({title,rows,actions,lineOptions,lineSelected,onLineChange,productOptions,productSelected,onProductChange}:{
+export function ProductRankTable({title,rows,actions,lineOptions,lineSelected,onLineChange,productOptions,productSelected,onProductChange,loading=false}:{
   title:string;
   rows:{rank:number;line:string;product:string;quantity:number}[];
   actions?:ReactNode;
   lineOptions:string[];lineSelected:Set<string>|null;onLineChange:(s:Set<string>|null)=>void;
   productOptions:string[];productSelected:Set<string>|null;onProductChange:(s:Set<string>|null)=>void;
+  loading?:boolean;
 }){
   return (
     <section className="card wide">
@@ -110,7 +111,9 @@ export function ProductRankTable({title,rows,actions,lineOptions,lineSelected,on
             </tr>
           </thead>
           <tbody>
-            {rows.length?rows.map((r)=>(
+            {loading?(
+              <tr><td colSpan={4} className="empty-row">12개월치 데이터를 불러오는 중...</td></tr>
+            ):rows.length?rows.map((r)=>(
               <tr key={r.rank}><td>{r.rank}</td><td>{r.line}</td><td>{r.product}</td><td>{r.quantity}</td></tr>
             )):(
               <tr><td colSpan={4} className="empty-row">필터에 해당하는 데이터가 없습니다.</td></tr>
