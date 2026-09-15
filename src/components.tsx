@@ -39,7 +39,12 @@ function ColumnFilterHeader({label,options,selected,onChange}:{label:string;opti
       if(popRef.current?.contains(e.target as Node))return;
       setOpen(false);
     };
-    const onScroll=()=>setOpen(false);
+    // 체크박스 목록 자체의 스크롤이나 뒤쪽 페이지 스크롤 둘 다 팝오버를 닫지
+    // 않고, th 위치를 다시 재서 페이지 스크롤을 따라가게만 한다.
+    const onScroll=()=>{
+      const rect=thRef.current?.getBoundingClientRect();
+      if(rect)setPos({top:rect.bottom+4,left:rect.left});
+    };
     document.addEventListener('mousedown',onOutside);
     window.addEventListener('scroll',onScroll,true);
     return ()=>{document.removeEventListener('mousedown',onOutside);window.removeEventListener('scroll',onScroll,true);};
