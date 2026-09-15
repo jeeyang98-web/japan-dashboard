@@ -1917,7 +1917,7 @@ function parsePeriodRange_(periodText) {
  * getJpDailyLineQtyByMonth_ 와 동일한 로직이나 월 단위가 아닌 임의의 날짜 범위를 받습니다.
  */
 function getJpDailyLineQtyByDateRange_(startYmd, endYmd, raw) {
-  var empty = { labels: [], series: {} };
+  var empty = { labels: [], series: {}, bySku: {} };
   var data = raw || readJpProductSheetRaw_();
   var meta = data.meta;
 
@@ -1930,13 +1930,18 @@ function getJpDailyLineQtyByDateRange_(startYmd, endYmd, raw) {
   if (!dayColIdx.length) return empty;
 
   var series = {};
+  var bySku = {}; // { 라인명: { 상품명(SKU): [일별 수량] } } - 프로모션 라인별/상품별 토글용
   data.names.forEach(function (name, rowIndex) {
     if (!name || isAggregateRowLabel_(name)) return;
     var line = data.lines[rowIndex];
     if (!line || isAggregateRowLabel_(line)) return;
     if (!series[line]) series[line] = new Array(dayColIdx.length).fill(0);
+    if (!bySku[line]) bySku[line] = {};
+    if (!bySku[line][name]) bySku[line][name] = new Array(dayColIdx.length).fill(0);
     dayColIdx.forEach(function (colIdx, i) {
-      series[line][i] += Number(data.qtyValues[rowIndex][colIdx] || 0);
+      var qty = Number(data.qtyValues[rowIndex][colIdx] || 0);
+      series[line][i] += qty;
+      bySku[line][name][i] += qty;
     });
   });
 
@@ -1945,7 +1950,8 @@ function getJpDailyLineQtyByDateRange_(startYmd, endYmd, raw) {
       var d = meta.dates[colIdx];
       return Number(d.slice(5, 7)) + "/" + Number(d.slice(8, 10));
     }),
-    series: series
+    series: series,
+    bySku: bySku
   };
 }
 
