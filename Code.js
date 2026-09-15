@@ -1873,8 +1873,28 @@ function getPromotionData_() {
       : [],
     megapoDailyFunnel: megapoRange
       ? getJpDailyFunnelInRange_(megapoRange.startYmd, megapoRange.endYmd, jpDailyFunnelAll)
-      : []
+      : [],
+    // 프론트에서 "분기(MEGAWARI)/월(MEGAPO) 선택" 토글로 아무 기간이나 골라
+    // 볼 수 있도록, 최신 기간뿐 아니라 캠페인 테이블에 있는 모든 기간의
+    // 일별 상품별 판매량/전환지표를 함께 내려준다. campaign.group(예: "1Q",
+    // "2Q" / 월 번호)을 키로 씀.
+    megawariByPeriod: buildPromotionPeriodMap_(megawari, jpProductRaw, jpDailyFunnelAll),
+    megapoByPeriod: buildPromotionPeriodMap_(megapo, jpProductRaw, jpDailyFunnelAll)
   };
+}
+
+function buildPromotionPeriodMap_(campaigns, jpProductRaw, jpDailyFunnelAll) {
+  var byGroup = {};
+  campaigns.forEach(function (c) {
+    var range = parsePeriodRange_(c.period);
+    if (!range) return;
+    byGroup[c.group] = {
+      period: c.period,
+      productDaily: getJpDailyLineQtyByDateRange_(range.startYmd, range.endYmd, jpProductRaw),
+      dailyFunnel: getJpDailyFunnelInRange_(range.startYmd, range.endYmd, jpDailyFunnelAll)
+    };
+  });
+  return byGroup;
 }
 
 /**
