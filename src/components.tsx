@@ -30,6 +30,9 @@ function ColumnFilterHeader({label,options,selected,onChange}:{label:string;opti
   const thRef=useRef<HTMLTableCellElement>(null);
   const popRef=useRef<HTMLDivElement>(null);
   useEffect(()=>{
+    if(open)setQuery('');
+  },[open]);
+  useEffect(()=>{
     if(!open)return;
     const onOutside=(e:MouseEvent)=>{
       if(thRef.current?.contains(e.target as Node))return;
