@@ -28,7 +28,7 @@ import {
 import { krDailySheetUrl, krProductSheetUrl, krSheetData, krSheetUrl } from "./data/krSheetData";
 import { jpProductSheetUrl, jpSheetData, jpSheetUrl } from "./data/jpSheetData";
 import "./promotion.css";
-import type { DashboardData, DailyLineQty, ProductRow, Series } from "./types";
+import type { DailyFunnelRow, DashboardData, DailyLineQty, ProductRow, Series } from "./types";
 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 type Page =
   | "total"
@@ -1083,6 +1083,26 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
     </>
   );
 }
+// JP Executive의 "일별 KPI 추이" 차트와 같은 모양 - 유입자수/장바구니/주문완료를
+// 기본 축에, 주문전환율(%)을 보조축(y1)에 그린다. 프로모션 기간의 일별 전환지표용.
+function dailyFunnelSeries(rows?: DailyFunnelRow[]): Series | undefined {
+  if (!rows?.length) return undefined;
+  return {
+    labels: rows.map((r) => `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`),
+    datasets: [
+      { label: "유입자수", data: rows.map((r) => r.traffic), borderColor: "#5a4ff3", backgroundColor: "#5a4ff3" },
+      { label: "장바구니", data: rows.map((r) => r.cart), borderColor: "#24b47e", backgroundColor: "#24b47e" },
+      { label: "주문완료", data: rows.map((r) => r.orders), borderColor: "#f5a623", backgroundColor: "#f5a623" },
+      {
+        label: "주문전환율(%)",
+        data: rows.map((r) => r.conversionRate),
+        borderColor: "#ef4c8b",
+        backgroundColor: "#ef4c8b",
+        yAxisID: "y1",
+      },
+    ],
+  };
+}
 function Promotion({ d }: { d: DashboardData | null }) {
   const api = d?.promotion;
   const megawari = api?.megawariCampaigns?.length ? api.megawariCampaigns : megawariCampaigns;
@@ -1097,6 +1117,8 @@ function Promotion({ d }: { d: DashboardData | null }) {
   };
   const megawariProductDaily = buildDailyLineSeries([api?.megawariProductDaily]);
   const megapoProductDaily = buildDailyLineSeries([api?.megapoProductDaily]);
+  const megawariDailyFunnel = dailyFunnelSeries(api?.megawariDailyFunnel);
+  const megapoDailyFunnel = dailyFunnelSeries(api?.megapoDailyFunnel);
   return (
     <>
       <section className="intro">
@@ -1127,6 +1149,16 @@ function Promotion({ d }: { d: DashboardData | null }) {
         <ChartCard
           title={`MEGAPO 일별 상품별 판매 추이${api?.megapoPeriod ? ` · ${api.megapoPeriod}` : ""}`}
           series={megapoProductDaily}
+          kind="line"
+        />
+        <ChartCard
+          title={`MEGAWARI 일별 전환지표${api?.megawariPeriod ? ` · ${api.megawariPeriod}` : ""}`}
+          series={megawariDailyFunnel}
+          kind="line"
+        />
+        <ChartCard
+          title={`MEGAPO 일별 전환지표${api?.megapoPeriod ? ` · ${api.megapoPeriod}` : ""}`}
+          series={megapoDailyFunnel}
           kind="line"
         />
         <ChartCard title="MEGAWARI 분기별 총매출" series={p?.megawariTotals} />
