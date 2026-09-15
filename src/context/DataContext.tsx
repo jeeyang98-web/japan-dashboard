@@ -81,6 +81,8 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       megapoProductDaily: pick(promo, "megapoProductDaily") || {},
       megawariDailyFunnel: rows(pick(promo, "megawariDailyFunnel")),
       megapoDailyFunnel: rows(pick(promo, "megapoDailyFunnel")),
+      megawariByPeriod: pick(promo, "megawariByPeriod") || {},
+      megapoByPeriod: pick(promo, "megapoByPeriod") || {},
     },
     marketing: pick(p, "marketing") || {},
     competitor: pick(p, "competitor") || {},

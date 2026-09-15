@@ -60,6 +60,8 @@ export type DashboardData = {
     megapoProductDaily?: DailyLineQty;
     megawariDailyFunnel?: DailyFunnelRow[];
     megapoDailyFunnel?: DailyFunnelRow[];
+    megawariByPeriod?: Record<string, { period: string; productDaily: DailyLineQty; dailyFunnel: DailyFunnelRow[] }>;
+    megapoByPeriod?: Record<string, { period: string; productDaily: DailyLineQty; dailyFunnel: DailyFunnelRow[] }>;
   };
   marketing?: Record<string, unknown>;
   competitor?: Record<string, unknown>;

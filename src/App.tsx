@@ -1115,10 +1115,55 @@ function Promotion({ d }: { d: DashboardData | null }) {
     megawariDayColumnRows: buildDayColumnRows(megawari, "분기"),
     megapoDayColumnRows: buildDayColumnRows(megapo, "월"),
   };
-  const megawariProductDaily = buildDailyLineSeries([api?.megawariProductDaily]);
-  const megapoProductDaily = buildDailyLineSeries([api?.megapoProductDaily]);
-  const megawariDailyFunnel = dailyFunnelSeries(api?.megawariDailyFunnel);
-  const megapoDailyFunnel = dailyFunnelSeries(api?.megapoDailyFunnel);
+  // 분기/월 선택 토글 - 캠페인 테이블 순서(=시트 순서, 시간순)대로 그룹
+  // 라벨(1Q/2Q/3Q, 월 번호)을 뽑아 목록으로 쓰고, 기본값은 최신 기간.
+  const megawariGroups = megawari.map((c) => c.group);
+  const megapoGroups = megapo.map((c) => c.group);
+  const [megawariGroupSel, setMegawariGroupSel] = useState<string | null>(null);
+  const [megapoGroupSel, setMegapoGroupSel] = useState<string | null>(null);
+  const megawariActiveGroup =
+    megawariGroupSel && megawariGroups.includes(megawariGroupSel)
+      ? megawariGroupSel
+      : megawariGroups[megawariGroups.length - 1];
+  const megapoActiveGroup =
+    megapoGroupSel && megapoGroups.includes(megapoGroupSel) ? megapoGroupSel : megapoGroups[megapoGroups.length - 1];
+  // byPeriod가 아직 없는 캐시(배포 직후 등)에서만 예전 필드(최신 기간 전용)로
+  // 대체한다 - byPeriod가 있는데 특정 그룹만 없는 경우(시트에 "7/-7/9"처럼
+  // 파싱 안 되는 기간이 섞여 있는 경우)는 다른 기간 데이터로 잘못 대체하지
+  // 않고 그냥 데이터 없음으로 보여준다.
+  const hasMegawariByPeriod = !!api?.megawariByPeriod && Object.keys(api.megawariByPeriod).length > 0;
+  const hasMegapoByPeriod = !!api?.megapoByPeriod && Object.keys(api.megapoByPeriod).length > 0;
+  const megawariPeriodData = hasMegawariByPeriod ? api?.megawariByPeriod?.[megawariActiveGroup] : undefined;
+  const megapoPeriodData = hasMegapoByPeriod ? api?.megapoByPeriod?.[megapoActiveGroup] : undefined;
+  const megawariPeriodLabel =
+    megawariPeriodData?.period ??
+    (hasMegawariByPeriod ? megawari.find((c) => c.group === megawariActiveGroup)?.period : api?.megawariPeriod);
+  const megapoPeriodLabel =
+    megapoPeriodData?.period ??
+    (hasMegapoByPeriod ? megapo.find((c) => c.group === megapoActiveGroup)?.period : api?.megapoPeriod);
+  const megawariProductDaily = buildDailyLineSeries([
+    hasMegawariByPeriod ? megawariPeriodData?.productDaily : api?.megawariProductDaily,
+  ]);
+  const megapoProductDaily = buildDailyLineSeries([
+    hasMegapoByPeriod ? megapoPeriodData?.productDaily : api?.megapoProductDaily,
+  ]);
+  const megawariDailyFunnel = dailyFunnelSeries(
+    hasMegawariByPeriod ? megawariPeriodData?.dailyFunnel : api?.megawariDailyFunnel,
+  );
+  const megapoDailyFunnel = dailyFunnelSeries(hasMegapoByPeriod ? megapoPeriodData?.dailyFunnel : api?.megapoDailyFunnel);
+  const periodTabs = (
+    groups: string[],
+    active: string | undefined,
+    onChange: (v: string) => void,
+  ) => (
+    <div className="mini-tabs">
+      {groups.map((g) => (
+        <button key={g} className={active === g ? "active" : ""} onClick={() => onChange(g)}>
+          {g}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <>
       <section className="intro">
@@ -1142,22 +1187,24 @@ function Promotion({ d }: { d: DashboardData | null }) {
           kind="line"
         />
         <ChartCard
-          title={`MEGAWARI 일별 상품별 판매 추이${api?.megawariPeriod ? ` · ${api.megawariPeriod}` : ""}`}
+          title={`MEGAWARI 일별 상품별 판매 추이${megawariPeriodLabel ? ` · ${megawariPeriodLabel}` : ""}`}
           series={megawariProductDaily}
           kind="line"
+          actions={megawariGroups.length > 1 ? periodTabs(megawariGroups, megawariActiveGroup, setMegawariGroupSel) : undefined}
         />
         <ChartCard
-          title={`MEGAPO 일별 상품별 판매 추이${api?.megapoPeriod ? ` · ${api.megapoPeriod}` : ""}`}
+          title={`MEGAPO 일별 상품별 판매 추이${megapoPeriodLabel ? ` · ${megapoPeriodLabel}` : ""}`}
           series={megapoProductDaily}
           kind="line"
+          actions={megapoGroups.length > 1 ? periodTabs(megapoGroups, megapoActiveGroup, setMegapoGroupSel) : undefined}
         />
         <ChartCard
-          title={`MEGAWARI 일별 전환지표${api?.megawariPeriod ? ` · ${api.megawariPeriod}` : ""}`}
+          title={`MEGAWARI 일별 전환지표${megawariPeriodLabel ? ` · ${megawariPeriodLabel}` : ""}`}
           series={megawariDailyFunnel}
           kind="line"
         />
         <ChartCard
-          title={`MEGAPO 일별 전환지표${api?.megapoPeriod ? ` · ${api.megapoPeriod}` : ""}`}
+          title={`MEGAPO 일별 전환지표${megapoPeriodLabel ? ` · ${megapoPeriodLabel}` : ""}`}
           series={megapoDailyFunnel}
           kind="line"
         />
