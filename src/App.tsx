@@ -777,6 +777,7 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [cumulativeTableMarket, setCumulativeTableMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const [top10TableLineFilter, setTop10TableLineFilter] = useState<Set<string> | null>(null);
   const [top10TableProductFilter, setTop10TableProductFilter] = useState<Set<string> | null>(null);
+  const [top10TableMode, setTop10TableMode] = useState<"라인별" | "상품별">("라인별");
   const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
     <div className="mini-tabs">
       {(["TOTAL", "KR", "JP"] as const).map((v) => (
@@ -874,21 +875,55 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
           series={productSeries(productDataByMarket[cumulativeChartMarket]?.cumulative)}
           actions={marketMiniTabs(cumulativeChartMarket, setCumulativeChartMarket)}
         />
-        <ProductRankTable
-          title={`${m}월 상품 순위`}
-          rows={top10TableRows}
-          actions={marketMiniTabs(top10TableMarket, (v) => {
-            setTop10TableMarket(v);
-            setTop10TableLineFilter(null);
-            setTop10TableProductFilter(null);
-          })}
-          lineOptions={top10TableLineOptions}
-          lineSelected={top10TableLineFilter}
-          onLineChange={setTop10TableLineFilter}
-          productOptions={top10TableProductOptions}
-          productSelected={top10TableProductFilter}
-          onProductChange={setTop10TableProductFilter}
-        />
+        {top10TableMode === "라인별" ? (
+          <DataTable
+            title={`${m}월 상품 순위`}
+            rows={productDataByMarket[top10TableMarket]?.monthly?.[String(m)]?.map((v, i) => ({
+              rank: i + 1,
+              product: v.name,
+              quantity: v.quantity,
+            }))}
+            actions={
+              <div className="rank-controls">
+                {marketMiniTabs(top10TableMarket, setTop10TableMarket)}
+                <div className="mini-tabs">
+                  {(["라인별", "상품별"] as const).map((v) => (
+                    <button key={v} className={top10TableMode === v ? "active" : ""} onClick={() => setTop10TableMode(v)}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+          />
+        ) : (
+          <ProductRankTable
+            title={`${m}월 상품 순위`}
+            rows={top10TableRows}
+            actions={
+              <div className="rank-controls">
+                {marketMiniTabs(top10TableMarket, (v) => {
+                  setTop10TableMarket(v);
+                  setTop10TableLineFilter(null);
+                  setTop10TableProductFilter(null);
+                })}
+                <div className="mini-tabs">
+                  {(["라인별", "상품별"] as const).map((v) => (
+                    <button key={v} className={top10TableMode === v ? "active" : ""} onClick={() => setTop10TableMode(v)}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+            lineOptions={top10TableLineOptions}
+            lineSelected={top10TableLineFilter}
+            onLineChange={setTop10TableLineFilter}
+            productOptions={top10TableProductOptions}
+            productSelected={top10TableProductFilter}
+            onProductChange={setTop10TableProductFilter}
+          />
+        )}
         <DataTable
           title="누적 상품 순위"
           rows={productDataByMarket[cumulativeTableMarket]?.cumulative?.map((v, i) => ({
