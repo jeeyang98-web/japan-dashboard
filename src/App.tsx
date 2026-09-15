@@ -713,6 +713,21 @@ function mergeBySku(sources: (DailyLineQty | undefined)[]): Record<string, Recor
   });
   return merged;
 }
+// bySku(라인 -> SKU -> 일별 수량)를 라인 구분 없이 SKU 단위로 평평하게 합친다.
+// 프로모션 "상품별" 토글처럼 라인 상관없이 SKU를 바로 고를 때 씀.
+function flattenBySku(bySku: Record<string, Record<string, number[]>> | undefined): Record<string, number[]> {
+  const flat: Record<string, number[]> = {};
+  if (!bySku) return flat;
+  Object.values(bySku).forEach((skus) => {
+    Object.entries(skus).forEach(([sku, data]) => {
+      if (!flat[sku]) flat[sku] = new Array(data.length).fill(0);
+      data.forEach((v, i) => {
+        flat[sku][i] = (flat[sku][i] || 0) + (v || 0);
+      });
+    });
+  });
+  return flat;
+}
 function buildSkuSeries(bySku: Record<string, number[]> | undefined, labels: string[], limit = 10): Series | undefined {
   if (!bySku || !labels.length) return undefined;
   const top = Object.entries(bySku)
@@ -1141,12 +1156,8 @@ function Promotion({ d }: { d: DashboardData | null }) {
   const megapoPeriodLabel =
     megapoPeriodData?.period ??
     (hasMegapoByPeriod ? megapo.find((c) => c.group === megapoActiveGroup)?.period : api?.megapoPeriod);
-  const megawariProductDaily = buildDailyLineSeries([
-    hasMegawariByPeriod ? megawariPeriodData?.productDaily : api?.megawariProductDaily,
-  ]);
-  const megapoProductDaily = buildDailyLineSeries([
-    hasMegapoByPeriod ? megapoPeriodData?.productDaily : api?.megapoProductDaily,
-  ]);
+  const megawariProductDailyRaw = hasMegawariByPeriod ? megawariPeriodData?.productDaily : api?.megawariProductDaily;
+  const megapoProductDailyRaw = hasMegapoByPeriod ? megapoPeriodData?.productDaily : api?.megapoProductDaily;
   const megawariDailyFunnel = dailyFunnelSeries(
     hasMegawariByPeriod ? megawariPeriodData?.dailyFunnel : api?.megawariDailyFunnel,
   );
@@ -1163,6 +1174,73 @@ function Promotion({ d }: { d: DashboardData | null }) {
         </button>
       ))}
     </div>
+  );
+  // 일별 상품별 판매 추이의 라인별/상품별 토글 + 라인·상품 선택 드롭다운.
+  // "전체"면 지금처럼 상위 항목들을 같이 보여주고, 하나를 고르면 그 라인/
+  // 상품 한 줄만 뽑아서 보여준다.
+  const [megawariTrendMode, setMegawariTrendMode] = useState<"라인별" | "상품별">("라인별");
+  const [megawariTrendSel, setMegawariTrendSel] = useState("전체");
+  const [megapoTrendMode, setMegapoTrendMode] = useState<"라인별" | "상품별">("라인별");
+  const [megapoTrendSel, setMegapoTrendSel] = useState("전체");
+  const productTrendChart = (
+    raw: DailyLineQty | undefined,
+    mode: "라인별" | "상품별",
+    setMode: (v: "라인별" | "상품별") => void,
+    sel: string,
+    setSel: (v: string) => void,
+  ) => {
+    const labels = raw?.labels || [];
+    const lineOptions = Object.keys(raw?.series || {}).sort();
+    const skuFlat = flattenBySku(raw?.bySku);
+    const skuOptions = Object.keys(skuFlat).sort();
+    const options = mode === "라인별" ? lineOptions : skuOptions;
+    const source = mode === "라인별" ? raw?.series : skuFlat;
+    const effSel = options.includes(sel) ? sel : "전체";
+    const series =
+      effSel === "전체"
+        ? buildSkuSeries(source, labels, 5)
+        : buildSkuSeries(source ? { [effSel]: source[effSel] || [] } : undefined, labels, 1);
+    const controls = (
+      <>
+        <div className="mini-tabs">
+          {(["라인별", "상품별"] as const).map((v) => (
+            <button
+              key={v}
+              className={mode === v ? "active" : ""}
+              onClick={() => {
+                setMode(v);
+                setSel("전체");
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <select className="rank-line-select" value={effSel} onChange={(e) => setSel(e.target.value)}>
+          <option value="전체">전체</option>
+          {options.map((o) => (
+            <option value={o} key={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </>
+    );
+    return { series, controls };
+  };
+  const megawariTrend = productTrendChart(
+    megawariProductDailyRaw,
+    megawariTrendMode,
+    setMegawariTrendMode,
+    megawariTrendSel,
+    setMegawariTrendSel,
+  );
+  const megapoTrend = productTrendChart(
+    megapoProductDailyRaw,
+    megapoTrendMode,
+    setMegapoTrendMode,
+    megapoTrendSel,
+    setMegapoTrendSel,
   );
   return (
     <>
@@ -1188,15 +1266,25 @@ function Promotion({ d }: { d: DashboardData | null }) {
         />
         <ChartCard
           title={`MEGAWARI 일별 상품별 판매 추이${megawariPeriodLabel ? ` · ${megawariPeriodLabel}` : ""}`}
-          series={megawariProductDaily}
+          series={megawariTrend.series}
           kind="line"
-          actions={megawariGroups.length > 1 ? periodTabs(megawariGroups, megawariActiveGroup, setMegawariGroupSel) : undefined}
+          actions={
+            <div className="rank-controls">
+              {megawariGroups.length > 1 ? periodTabs(megawariGroups, megawariActiveGroup, setMegawariGroupSel) : null}
+              {megawariTrend.controls}
+            </div>
+          }
         />
         <ChartCard
           title={`MEGAPO 일별 상품별 판매 추이${megapoPeriodLabel ? ` · ${megapoPeriodLabel}` : ""}`}
-          series={megapoProductDaily}
+          series={megapoTrend.series}
           kind="line"
-          actions={megapoGroups.length > 1 ? periodTabs(megapoGroups, megapoActiveGroup, setMegapoGroupSel) : undefined}
+          actions={
+            <div className="rank-controls">
+              {megapoGroups.length > 1 ? periodTabs(megapoGroups, megapoActiveGroup, setMegapoGroupSel) : null}
+              {megapoTrend.controls}
+            </div>
+          }
         />
         <ChartCard
           title={`MEGAWARI 일별 전환지표${megawariPeriodLabel ? ` · ${megawariPeriodLabel}` : ""}`}
