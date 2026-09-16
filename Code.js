@@ -587,19 +587,7 @@ function getTotalBusinessData(month) {
   const monthlyJpJpy = getJpMonthlyRevenueFromLog_();
 
   const krClose = getKrMonthlyClose_();
-  const liveRate = getLiveJpyKrwRate_();
-  const exchangeRates = {};
-  let lastKnownRate = 0;
-
-  // 마감이 끝난 달(월마감 시트에 실제 환산 환율이 남아있는 달)은 그 실제
-  // 환율을 그대로 쓰고, 아직 마감 전이라 실제 환율이 없는 달(예: 이번 달)은
-  // 구글 파이낸스 실시간 환율로 대체합니다. 실시간 환율 조회가 실패하면
-  // (예: GOOGLEFINANCE 일시 오류) 가장 최근 마감월의 환율로 대체합니다.
-  for (let m = 1; m <= 12; m++) {
-    const rate = krClose.impliedRate[m - 1];
-    if (rate) lastKnownRate = rate;
-    exchangeRates[String(m)] = rate || liveRate || lastKnownRate;
-  }
+  const exchangeRates = getKrJpExchangeRateMap_(krClose);
 
   const monthlyJpKrw = monthlyJpJpy.map((jpy, idx) =>
     Math.round(jpy * (exchangeRates[String(idx + 1)] || 0))
@@ -1047,6 +1035,68 @@ function getKrMonthlyClose_() {
     monthlyJpQoo10Krw: monthlyJpQoo10Krw,
     monthlyJpOtherKrw: monthlyJpOtherKrw
   };
+}
+
+/**
+ * "월마감" 시트에서 역산한 월별 실제 환율(krClose.impliedRate, AD/AE 병기
+ * 값에서 나온 그 달의 실거래 환율)에, 아직 마감 전이라 실제 환율이 없는
+ * 달(예: 이번 달)은 구글 파이낸스 실시간 환율로, 그마저 실패하면 가장 최근
+ * 마감월의 환율로 대체한 "월별 평균 환율" 12개월치를 {"1":rate, ...} 형태로
+ * 반환합니다. getTotalBusinessData의 monthlyJpKrw 환산과 getQoo10DashboardMonthlyKrw_
+ * (큐텐 전용 대시보드 시트의 엔화 매출 환산)이 같은 환율을 공유해서 씁니다.
+ */
+function getKrJpExchangeRateMap_(krClose) {
+  const liveRate = getLiveJpyKrwRate_();
+  const exchangeRates = {};
+  let lastKnownRate = 0;
+
+  for (let m = 1; m <= 12; m++) {
+    const rate = krClose.impliedRate[m - 1];
+    if (rate) lastKnownRate = rate;
+    exchangeRates[String(m)] = rate || liveRate || lastKnownRate;
+  }
+
+  return exchangeRates;
+}
+
+/**
+ * "큐텐 운영 대시보드" 스프레드시트(SPREADSHEET_ID, "매출내역" 시트)의
+ * K:L열 - 쇼핑몰 정보 옆에 있는 월별 요약표(K열: "N월" 라벨, L열: "총매출",
+ * 엔화). 이 표는 일자별 로그(B:G열)가 쌓이는 대로 바로 갱신되므로, "월마감"
+ * KR 시트의 큐텐 열(마감 완료 전까지 0으로 비어있음)과 달리 진행 중인 달도
+ * 실시간으로 반영됩니다.
+ */
+function getQoo10DashboardMonthlyJpy_() {
+  const ss = getJpSpreadsheet_();
+  const sheet = requireSheet_(ss, "매출내역");
+
+  const raw = sheet.getRange(6, 11, 12, 2).getDisplayValues(); // K:L, 12 rows
+  const totals = new Array(12).fill(0);
+
+  raw.forEach(row => {
+    const label = String(row[0] || ""); // K열: "1월".."12월"
+    const match = label.match(/^(\d{1,2})월/);
+    if (!match) return;
+    const m = Number(match[1]);
+    if (m < 1 || m > 12) return;
+    totals[m - 1] = toNumber_(row[1]); // L열: 총매출(엔화)
+  });
+
+  return totals;
+}
+
+/**
+ * getQoo10DashboardMonthlyJpy_()의 큐텐 월별 매출(엔화)을 getKrJpExchangeRateMap_()의
+ * 월별 평균 환율로 원화 환산합니다. KR Executive/Total Business의 "채널별 월별
+ * 매출 추이(매출액+배송비)" 차트의 "큐텐" 라인이 이 값을 씁니다.
+ */
+function getQoo10DashboardMonthlyKrw_() {
+  const monthlyJpy = getQoo10DashboardMonthlyJpy_();
+  const exchangeRates = getKrJpExchangeRateMap_(getKrMonthlyClose_());
+
+  return monthlyJpy.map((jpy, idx) =>
+    Math.round(jpy * (exchangeRates[String(idx + 1)] || 0))
+  );
 }
 
 /**
@@ -1514,10 +1564,12 @@ function getKoreaFunnelData(month) {
 
   const dailyRaw = readKrDailySheetRaw_();
   // getKrChannelRevenueByMonth_()는 "일별매출" 시트의 국내 채널 열만 자동
-  // 인식하는데, 큐텐(Qoo10)은 그 시트가 아니라 "월마감" 시트의 별도 섹션에만
-  // 있어서 여기서 따로 더해준다 (getKrChannelRevenue_()와 같은 값).
+  // 인식하는데, 큐텐(Qoo10)은 그 시트에 없어서 여기서 따로 더해준다.
+  // "월마감" 시트의 큐텐 열은 마감 완료 전까지 0으로 비어있어 진행 중인
+  // 달이 항상 반영 안 됐으므로, 큐텐 전용 대시보드 시트("매출내역" K:L열)의
+  // 실시간 엔화 매출을 월별 평균 환율로 환산해서 쓴다 (getQoo10DashboardMonthlyKrw_).
   const channelRevenue = getKrChannelRevenueByMonth_(dailyRaw);
-  channelRevenue["큐텐"] = getKrQoo10RevenueKrw_(sheet);
+  channelRevenue["큐텐"] = getQoo10DashboardMonthlyKrw_();
 
   return {
     month: month,
