@@ -3,7 +3,7 @@ const BASE_URL = import.meta.env.VITE_GAS_API_URL as string | undefined;
 // http://localhost:8000. When set, this takes priority over VITE_GAS_API_URL.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 export type ApiName =
-  "platform" | "total" | "krProduct" | "krProductSales" | "krFunnel" | "promotion" | "jpFunnel";
+  "platform" | "total" | "krProduct" | "krProductSales" | "krFunnel" | "globalPlatform" | "promotion" | "jpFunnel";
 export type JsonObject = Record<string, any>;
 export type DashboardApiBundle = {
   month: number;
@@ -12,6 +12,7 @@ export type DashboardApiBundle = {
   krProduct: JsonObject;
   krProductSales: JsonObject;
   krFunnel: JsonObject;
+  globalPlatform: JsonObject;
   promotion: JsonObject;
   jpFunnel: any[];
 };
@@ -90,6 +91,8 @@ export const fetchKrProductSalesData = (month: number, force = false) =>
   request("krProductSales", month, force);
 export const fetchKrFunnelData = (month: number, force = false) =>
   request("krFunnel", month, force);
+export const fetchGlobalPlatformData = (month: number, force = false) =>
+  request("globalPlatform", month, force);
 export const fetchPromotionData = (month: number, force = false) =>
   request("promotion", month, force);
 export const fetchJpFunnelData = (month: number, force = false) =>
@@ -106,22 +109,24 @@ export async function fetchDashboardBundle(
       krProduct: {},
       krProductSales: {},
       krFunnel: {},
+      globalPlatform: {},
       promotion: {},
       jpFunnel: [],
     };
   }
   const soft = (p: Promise<JsonObject>) => p.catch(() => ({}));
-  const [platform, total, krProduct, krProductSales, krFunnel, promotion, jpFunnel] =
+  const [platform, total, krProduct, krProductSales, krFunnel, globalPlatform, promotion, jpFunnel] =
     await Promise.all([
       soft(fetchPlatformData(month, force)),
       soft(fetchTotalBusinessData(month, force)),
       soft(fetchKrProductData(month, force)),
       soft(fetchKrProductSalesData(month, force)),
       soft(fetchKrFunnelData(month, force)),
+      soft(fetchGlobalPlatformData(month, force)),
       soft(fetchPromotionData(month, force)),
       fetchJpFunnelData(month, force).catch(() => []),
     ]);
-  return { month, platform, total, krProduct, krProductSales, krFunnel, promotion, jpFunnel };
+  return { month, platform, total, krProduct, krProductSales, krFunnel, globalPlatform, promotion, jpFunnel };
 }
 export function clearApiCache() {
   responseCache.clear();

@@ -3,6 +3,7 @@ import {
   BarChart3,
   Box,
   CalendarDays,
+  Compass,
   Flame,
   Globe2,
   JapanIcon,
@@ -34,6 +35,7 @@ type Page =
   | "total"
   | "jp"
   | "kr"
+  | "global"
   | "product"
   | "promotion"
   | "marketing"
@@ -43,6 +45,7 @@ const nav: [string, Page, any][] = [
   ["Total Business", "total", Globe2],
   ["JP Executive", "jp", MapIcon],
   ["KR Executive", "kr", BarChart3],
+  ["GLOBAL Executive", "global", Compass],
   ["Product", "product", Box],
   ["Promotion", "promotion", Flame],
   ["Marketing", "marketing", LineChart],
@@ -92,8 +95,8 @@ export default function App() {
                 setOpen(false);
               }}
             >
-              {i === 3 && <span className="nav-label inline">COMMERCE</span>}
-              {i === 5 && <span className="nav-label inline">INSIGHTS</span>}
+              {i === 4 && <span className="nav-label inline">COMMERCE</span>}
+              {i === 6 && <span className="nav-label inline">INSIGHTS</span>}
               <Icon size={18} />
               {label}
             </button>
@@ -154,6 +157,10 @@ const titles: Record<Page, [string, string]> = {
     "KR Executive Dashboard",
     "Korea sales, target achievement & cumulative performance",
   ],
+  global: [
+    "GLOBAL Executive Dashboard",
+    "예스스타일 · 올리브영 US · 키오키 · 쇼피 · 앳코스메 홍콩 target & sales",
+  ],
   product: [
     "Product Dashboard",
     "TOTAL / KR / JP SKU performance & product mix",
@@ -181,6 +188,7 @@ function PageView({
         m={month}
       />
     );
+  if (page === "global") return <Global d={data} m={month} />;
   if (page === "product") return <Product d={data} m={month} />;
   if (page === "promotion") return <Promotion d={data} />;
   return (
@@ -632,6 +640,117 @@ function Executive({
           </div>
         </section>
       )}
+    </>
+  );
+}
+const GLOBAL_GROUP_CLASSES = ["group-kr", "group-jp", "group-total"];
+function Global({ d, m }: { d: DashboardData | null; m: number }) {
+  const g = d?.global;
+  const platforms = g?.platforms || [];
+  const targets = g?.targets || {};
+  const sales = g?.sales || {};
+  const monthlyTotalTargets = g?.monthlyTotalTargets || [];
+  const monthlyTotalSales = g?.monthlyTotalSales || [];
+
+  const sale = monthlyTotalSales[m - 1] || 0;
+  const target = monthlyTotalTargets[m - 1] || 0;
+  const rate = target ? (sale / target) * 100 : 0;
+  const ytdSales = monthlyTotalSales.slice(0, m).reduce((a, b) => a + b, 0);
+
+  return (
+    <>
+      <section className="intro">
+        <h2>Global Platform Overview</h2>
+        <p>예스스타일 · 올리브영 US · 키오키 · 쇼피 · 앳코스메 홍콩 목표 대비 매출 실적입니다.</p>
+        <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">
+          목표 · 실매출 데이터 · 월마감(글로벌)
+        </a>
+      </section>
+      <div className="kpis grid-4">
+        <KPI label="이번 달 글로벌 매출" value={money(sale)} note={`${m}월 기준`} />
+        <KPI label="이번 달 목표" value={money(target)} />
+        <KPI label="목표 달성률" value={`${rate.toFixed(1)}%`} />
+        <KPI label="YTD 누계 매출" value={money(ytdSales)} note={`1월~${m}월`} />
+      </div>
+      <div className="grid">
+        <ChartCard
+          title="플랫폼별 월별 매출 추이"
+          series={channelTrendSeries(sales)}
+          kind="line"
+          wide
+        />
+        <ChartCard
+          title="글로벌 합계 월 목표 vs 실매출"
+          series={series(months, [
+            { label: "목표", data: monthlyTotalTargets, color: "#dfe0e8" },
+            { label: "실매출", data: monthlyTotalSales, color: "#5a4ff3" },
+          ])}
+        />
+        <ChartCard
+          title={`${m}월 플랫폼별 목표 vs 실매출`}
+          series={series(platforms, [
+            {
+              label: "목표",
+              data: platforms.map((name) => targets[name]?.[m - 1] || 0),
+              color: "#dfe0e8",
+            },
+            {
+              label: "실매출",
+              data: platforms.map((name) => sales[name]?.[m - 1] || 0),
+              color: "#5a4ff3",
+            },
+          ])}
+        />
+      </div>
+      <section className="card wide detail-table">
+        <h3>플랫폼별 월별 목표매출 · 실매출 상세</h3>
+        <p className="detail-caption">
+          월마감 시트의 "글로벌" 섹션(예스스타일/올리브영 US/키오키/쇼피/앳코스메 홍콩)의 목표·매출액 값입니다. 큐텐은 별도 채널별 매출 추이 차트에서 확인할 수 있습니다.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th rowSpan={2}>월</th>
+                {platforms.map((name, i) => (
+                  <th key={name} colSpan={3} className={GLOBAL_GROUP_CLASSES[i % GLOBAL_GROUP_CLASSES.length]}>
+                    {name}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {platforms.flatMap((name, i) => {
+                  const cls = GLOBAL_GROUP_CLASSES[i % GLOBAL_GROUP_CLASSES.length];
+                  return [
+                    <th key={`${name}-target`} className={cls}>목표</th>,
+                    <th key={`${name}-sales`} className={cls}>실매출</th>,
+                    <th key={`${name}-rate`} className={cls}>달성률</th>,
+                  ];
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((label, i) => (
+                <tr key={label}>
+                  <td>{label}</td>
+                  {platforms.flatMap((name) => {
+                    const t = targets[name]?.[i] || 0;
+                    const s = sales[name]?.[i] || 0;
+                    const r = t ? (s / t) * 100 : 0;
+                    return [
+                      <td key={`${name}-target`}>{money(t)}</td>,
+                      <td key={`${name}-sales`}>{money(s)}</td>,
+                      <td key={`${name}-rate`} className={r >= 90 ? "rate-good" : "rate-bad"}>
+                        {r.toFixed(1)}%
+                      </td>,
+                    ];
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </>
   );
 }

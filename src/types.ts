@@ -40,6 +40,13 @@ export type DashboardData = {
     dailyProductQty?: DailyLineQty;
     channelRevenue?: Record<string, number[]>;
   };
+  global?: {
+    platforms: string[];
+    targets: Record<string, number[]>;
+    sales: Record<string, number[]>;
+    monthlyTotalTargets: number[];
+    monthlyTotalSales: number[];
+  };
   jp?: {
     monthlySales: number[];
     targets: number[];

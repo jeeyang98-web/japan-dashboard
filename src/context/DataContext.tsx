@@ -23,6 +23,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
     kp = bundle.krProduct || {},
     ks = bundle.krProductSales || {},
     kf = bundle.krFunnel || {},
+    gp = bundle.globalPlatform || {},
     promo = bundle.promotion || {};
   return {
     updatedAt:
@@ -42,6 +43,13 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       ordersJp: rows(pick(t, "ordersJp", "jpMonthlyOrders")),
       channels: pick(t, "channels", "channelSales"),
       products: pick(t, "products", "productQuantities"),
+    },
+    global: {
+      platforms: rows(pick(gp, "platforms")),
+      targets: pick(gp, "targets") || {},
+      sales: pick(gp, "sales") || {},
+      monthlyTotalTargets: rows(pick(gp, "monthlyTotalTargets")),
+      monthlyTotalSales: rows(pick(gp, "monthlyTotalSales")),
     },
     jp: {
       monthlySales: rows(
