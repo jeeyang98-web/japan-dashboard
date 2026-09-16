@@ -970,6 +970,65 @@ function getKrDailyLineQtyByMonth_(month, sheet, meta) {
 }
 
 /**
+ * "월마감" 시트의 "글로벌" 섹션(AR~BK열, 21~23행이 헤더 · 예스스타일/
+ * 올리브영 US/키오키/쇼피/앳코스메 홍콩 5개 플랫폼, 플랫폼당 목표/매출액/
+ * 누계매출액/달성률 4열씩)에서 플랫폼별 월 목표/매출액 컬럼 위치. 큐텐은
+ * 같은 섹션 오른쪽(BL열)에도 있지만 이미 전용 "큐텐 운영 대시보드" 시트로
+ * 따로 반영하고 있어(getQoo10DashboardMonthlyKrw_) 여기서는 제외합니다.
+ * "일별매출" 시트에는 이 5개 플랫폼 전용 열이 없어(국가별 열만 있고 직접
+ * 매칭 안 됨) 큐텐과 달리 실시간 보정 없이 "월마감"의 매출액 열을 그대로
+ * 씁니다 — 마감 전인 진행 중인 달은 그만큼 0으로 비어있을 수 있습니다.
+ */
+var GLOBAL_PLATFORMS_ = [
+  { name: "예스스타일", targetCol: 44, salesCol: 45 },
+  { name: "올리브영 US", targetCol: 48, salesCol: 49 },
+  { name: "키오키", targetCol: 52, salesCol: 53 },
+  { name: "쇼피", targetCol: 56, salesCol: 57 },
+  { name: "앳코스메 홍콩", targetCol: 60, salesCol: 61 }
+];
+
+function getGlobalPlatformData(month) {
+  const ss = getKrSpreadsheet_();
+  const sheet = requireSheet_(ss, "월마감");
+  const raw = sheet.getRange(24, 44, 12, 20).getDisplayValues(); // AR..BK, 1월~12월
+
+  const targets = {};
+  const sales = {};
+  const platforms = GLOBAL_PLATFORMS_.map(p => p.name);
+
+  GLOBAL_PLATFORMS_.forEach(p => {
+    const targetIdx = p.targetCol - 44;
+    const salesIdx = p.salesCol - 44;
+    targets[p.name] = raw.map(row => toNumber_(row[targetIdx]));
+    sales[p.name] = raw.map(row => toNumber_(row[salesIdx]));
+  });
+
+  const monthlyTotalTargets = new Array(12).fill(0);
+  const monthlyTotalSales = new Array(12).fill(0);
+  for (let i = 0; i < 12; i++) {
+    platforms.forEach(name => {
+      monthlyTotalTargets[i] += targets[name][i];
+      monthlyTotalSales[i] += sales[name][i];
+    });
+  }
+
+  return {
+    month: month,
+    monthLabel: month + "월",
+    platforms: platforms,
+    targets: targets,
+    sales: sales,
+    monthlyTotalTargets: monthlyTotalTargets,
+    monthlyTotalSales: monthlyTotalSales,
+    generatedAt: Utilities.formatDate(
+      new Date(),
+      "Asia/Seoul",
+      "yyyy-MM-dd HH:mm:ss"
+    )
+  };
+}
+
+/**
  * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
  * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
  * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있어
@@ -1800,6 +1859,10 @@ function serveDashboardApi_(e) {
       return getKoreaFunnelData(month);
     },
 
+    globalPlatform: function () {
+      return getGlobalPlatformData(month);
+    },
+
     promotion: function () {
       return getPromotionData_();
     },
@@ -2091,6 +2154,7 @@ var SUPABASE_SYNC_HANDLERS_ = {
   krProduct: function (month) { return getKoreaProductData(month); },
   krProductSales: function (month) { return getKoreaProductSalesData(month); },
   krFunnel: function (month) { return getKoreaFunnelData(month); },
+  globalPlatform: function (month) { return getGlobalPlatformData(month); },
   // These two ignore month entirely (same as in serveDashboardApi_), so
   // syncAllToSupabase_ only computes them once per run and reuses the
   // result across every month it writes.
