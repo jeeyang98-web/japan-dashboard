@@ -1047,8 +1047,10 @@ function getKrMonthlyClose_() {
  * "월마감" 시트의 "1. 채널별 월마감 매출액" 섹션(A1:Z16)에서 국내 채널별
  * 월 매출액(VAT 제외, 배송비 별도 컬럼이 있는 채널은 매출액만)을 반환합니다.
  * 채널: 자사몰/네이버 스마트스토어/29CM/카카오 선물하기/글로벌몰/
- * 아모레 오프라인/CJ 올리브영/CJ ENM/기타. (getTotalBusinessData 의
+ * 아모레 오프라인/CJ 올리브영/CJ ENM/기타/큐텐. (getTotalBusinessData 의
  * channels 필드에서 사용)
+ * 큐텐(col31, "쿠텐" 매출액(KRW))은 같은 섹션 오른쪽에 떨어져 있는 컬럼이라
+ * 별도로 읽는다 - getKrMonthlyClose_()가 krTargets용으로 읽는 열과 동일.
  */
 function getKrChannelRevenue_() {
   const ss = getKrSpreadsheet_();
@@ -1073,8 +1075,18 @@ function getKrChannelRevenue_() {
   channelColumns.forEach(([name, col]) => {
     channels[name] = raw.map(row => toNumber_(row[col - 1]));
   });
+  channels["큐텐"] = getKrQoo10RevenueKrw_(sheet);
 
   return channels;
+}
+
+/**
+ * "월마감" 시트의 큐텐(Qoo10) 매출액(KRW, col31) 12개월치. getKrMonthlyClose_()가
+ * krTargets 등을 읽는 것과 같은 섹션 - 채널별 매출 목록 두 곳
+ * (getKrChannelRevenue_ / getKoreaFunnelData의 channelRevenue)에서 공유해서 쓴다.
+ */
+function getKrQoo10RevenueKrw_(sheet) {
+  return sheet.getRange(5, 31, 12, 1).getDisplayValues().map(row => toNumber_(row[0]));
 }
 
 
@@ -1493,6 +1505,11 @@ function getKoreaFunnelData(month) {
   }
 
   const dailyRaw = readKrDailySheetRaw_();
+  // getKrChannelRevenueByMonth_()는 "일별매출" 시트의 국내 채널 열만 자동
+  // 인식하는데, 큐텐(Qoo10)은 그 시트가 아니라 "월마감" 시트의 별도 섹션에만
+  // 있어서 여기서 따로 더해준다 (getKrChannelRevenue_()와 같은 값).
+  const channelRevenue = getKrChannelRevenueByMonth_(dailyRaw);
+  channelRevenue["큐텐"] = getKrQoo10RevenueKrw_(sheet);
 
   return {
     month: month,
@@ -1500,7 +1517,7 @@ function getKoreaFunnelData(month) {
     orders: ordersByMonth,
     funnel: funnel,
     dailyByMonth: getKrDailySalesByMonth_(dailyRaw),
-    channelRevenue: getKrChannelRevenueByMonth_(dailyRaw)
+    channelRevenue: channelRevenue
   };
 }
 
