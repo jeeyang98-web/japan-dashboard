@@ -991,7 +991,13 @@ function getKrMonthlyClose_() {
   const ss = getKrSpreadsheet_();
   const sheet = requireSheet_(ss, "월마감");
 
-  const section1 = sheet.getRange(5, 26, 12, 10).getDisplayValues();
+  // "국내 합계"(Z열) 헤더는 4행에 있어서 실제 12개월 데이터가 5행부터 시작하는데,
+  // 같은 섹션의 큐텐/기타(JP) 열(AD/AE/AH)은 헤더("매출액(엔화)"/"매출액(KRW)")가
+  // 한 행 아래인 5행에 있어서 실제 데이터가 6행부터 시작함 - 담당자가 이 JP 관련
+  // 열들을 나중에 한 행 밀려서 추가한 것으로 보임 (Apps Script 편집기에서 헤더 행
+  // 위치를 직접 확인). 그래서 국내 합계와 JP 관련 열을 서로 다른 시작행으로 따로 읽는다.
+  const domesticSection = sheet.getRange(5, 26, 12, 1).getDisplayValues(); // Z5:Z16 (1월~12월)
+  const jpSection = sheet.getRange(6, 30, 12, 5).getDisplayValues(); // AD6:AH17 (1월~12월)
   // "2. 국내 채널별 목표 대비 달성율" 섹션의 "국내 합계" 블록 · "목표 (100억)" 열(AM,
   // 39번째 열) · 월별 데이터는 24행부터(1월) 시작. 예전엔 AI열(35번째, 시코르 채널의
   // "목표" 열)을 읽고 있었는데, 이 시트가 담당자 손으로 매달 재구성되면서 실제 국내
@@ -1006,16 +1012,16 @@ function getKrMonthlyClose_() {
   const monthlyJpOtherKrw = []; // col34: 기타(JP) 매출액(KRW)
 
   for (let i = 0; i < 12; i++) {
-    const row = section1[i] || [];
-    const domestic = toNumber_(row[0]); // col26: 매출 합계_배송비 포함 (국내)
-    const jpJpy = toNumber_(row[4]); // col30: 큐텐 매출액(엔화)
-    const jpKrw = toNumber_(row[5]); // col31: 큐텐 매출액(KRW)
+    const domestic = toNumber_((domesticSection[i] || [])[0]); // col26: 매출 합계_배송비 포함 (국내)
+    const jpRow = jpSection[i] || [];
+    const jpJpy = toNumber_(jpRow[0]); // col30: 큐텐 매출액(엔화)
+    const jpKrw = toNumber_(jpRow[1]); // col31: 큐텐 매출액(KRW)
 
     monthlyKr.push(domestic);
     impliedRate.push(jpJpy ? jpKrw / jpJpy : 0);
     krTargets.push(toNumber_((targetColumn[i] || [])[0]));
     monthlyJpQoo10Krw.push(jpKrw);
-    monthlyJpOtherKrw.push(toNumber_(row[8])); // col34
+    monthlyJpOtherKrw.push(toNumber_(jpRow[4])); // col34
   }
 
   // 마감 전이라 "월마감"에 아직 0으로 남아있는 달은 "일별매출" 시트의
@@ -1086,7 +1092,9 @@ function getKrChannelRevenue_() {
  * (getKrChannelRevenue_ / getKoreaFunnelData의 channelRevenue)에서 공유해서 쓴다.
  */
 function getKrQoo10RevenueKrw_(sheet) {
-  return sheet.getRange(5, 31, 12, 1).getDisplayValues().map(row => toNumber_(row[0]));
+  // 6행부터(1월) 시작 - getKrMonthlyClose_()의 jpSection과 같은 이유(AE열 헤더가
+  // 5행에 있어 실제 데이터는 6행부터).
+  return sheet.getRange(6, 31, 12, 1).getDisplayValues().map(row => toNumber_(row[0]));
 }
 
 
