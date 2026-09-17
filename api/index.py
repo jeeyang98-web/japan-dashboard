@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # Must match the `handlers` keys in albacore/Code.js's serveDashboardApi_.
-API_NAMES = {"platform", "total", "krProduct", "krProductSales", "krFunnel", "promotion", "jpFunnel"}
+API_NAMES = {"platform", "total", "krProduct", "krProductSales", "krFunnel", "globalPlatform", "promotion", "jpFunnel"}
 
 
 async def get_cached(api: str, month: int) -> dict | None:
