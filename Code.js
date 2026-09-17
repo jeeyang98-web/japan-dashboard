@@ -1005,7 +1005,10 @@ function getGlobalPlatformData(month) {
 
   // 쇼피는 "월마감" 매출액 열이 마감 완료 전까지 0으로 비어있어 진행 중인
   // 달이 반영 안 되므로, "일별매출" 시트(싱가포르+베트남, 실시간 누적)로 대체.
-  sales["쇼피"] = getKrShopeeMonthlyKrw_();
+  const dailyRaw = readKrDailySheetRaw_();
+  sales["쇼피"] = getKrShopeeMonthlyKrw_(dailyRaw);
+  // "일자별 매출 추이" 표용 - 쇼피만 일별 데이터가 있어 선택한 달만 따로 반환.
+  const shopeeDaily = getKrShopeeDailyForMonth_(month, dailyRaw);
 
   const monthlyTotalTargets = new Array(12).fill(0);
   const monthlyTotalSales = new Array(12).fill(0);
@@ -1024,6 +1027,7 @@ function getGlobalPlatformData(month) {
     sales: sales,
     monthlyTotalTargets: monthlyTotalTargets,
     monthlyTotalSales: monthlyTotalSales,
+    shopeeDaily: shopeeDaily,
     generatedAt: Utilities.formatDate(
       new Date(),
       "Asia/Seoul",
@@ -1738,6 +1742,33 @@ function getKrShopeeMonthlyKrw_(raw) {
   }
 
   return totals;
+}
+
+/**
+ * "일별매출" 시트에서 선택한 달의 쇼피(싱가포르+베트남 합계) 일별 매출액을
+ * 날짜순으로 반환합니다. GLOBAL Executive의 "일자별 매출 추이" 표용 - 나머지
+ * 4개 플랫폼(예스스타일/올리브영 US/키오키/앳코스메 홍콩)은 "월마감"에 월별
+ * 수치만 있고 일별 데이터가 없어 이 표에는 포함되지 않습니다.
+ */
+function getKrShopeeDailyForMonth_(month, raw) {
+  const result = [];
+  const data = raw || readKrDailySheetRaw_();
+  const values = data.values;
+  const headerRow = data.headerRow;
+  if (headerRow < 0) return result;
+
+  for (let r = headerRow + 1; r < values.length; r++) {
+    const date = String(values[r][0] || "");
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) continue;
+    if (Number(match[2]) !== month) continue;
+    result.push({
+      date: match[1] + "-" + match[2] + "-" + match[3],
+      sales: toNumber_(values[r][35]) // AJ: 쇼피 합계 매출액
+    });
+  }
+
+  return result;
 }
 
 function dateToYmd_(value) {
