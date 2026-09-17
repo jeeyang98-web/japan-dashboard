@@ -942,6 +942,59 @@ async function fetchYearlyBySku(): Promise<{ KR: SkuTotals; JP: SkuTotals }> {
     JP: sumBySkuTotals(perMonth.map((r) => r.jpDaily)),
   };
 }
+// 라인 -> SKU -> 12개월 수량 배열. "상품별 월간 판매 추이" 차트의 라인 드릴다운
+// (그 라인의 SKU별 월간 추이)용 - fetchYearlyBySku와 같은 12개월치 API를 쓰지만,
+// 총합으로 접지 않고 월 인덱스를 그대로 살려서 월별 라인 차트에 바로 쓸 수 있게 한다.
+type MonthlySkuSeries = Record<string, Record<string, number[]>>;
+function sumBySkuMonthly(sources: (DailyLineQty | undefined)[]): MonthlySkuSeries {
+  const result: MonthlySkuSeries = {};
+  sources.forEach((s, monthIdx) => {
+    if (!s?.bySku) return;
+    Object.entries(s.bySku).forEach(([line, skus]) => {
+      if (!result[line]) result[line] = {};
+      Object.entries(skus).forEach(([sku, data]) => {
+        if (!result[line][sku]) result[line][sku] = new Array(12).fill(0);
+        result[line][sku][monthIdx] += data.reduce((a, b) => a + (b || 0), 0);
+      });
+    });
+  });
+  return result;
+}
+async function fetchYearlyBySkuMonthly(): Promise<{ KR: MonthlySkuSeries; JP: MonthlySkuSeries }> {
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const perMonth = await Promise.all(
+    months.map(async (mo) => {
+      const [ks, p] = await Promise.all([
+        fetchKrProductSalesData(mo).catch(() => ({})),
+        fetchPlatformData(mo).catch(() => ({})),
+      ]);
+      return {
+        krDaily: (ks as { krDailyProductQty?: DailyLineQty })?.krDailyProductQty,
+        jpDaily: (p as { jpDailyProductQty?: DailyLineQty })?.jpDailyProductQty,
+      };
+    }),
+  );
+  return {
+    KR: sumBySkuMonthly(perMonth.map((r) => r.krDaily)),
+    JP: sumBySkuMonthly(perMonth.map((r) => r.jpDaily)),
+  };
+}
+function mergeMonthlySkuSeries(sources: (MonthlySkuSeries | undefined)[]): MonthlySkuSeries {
+  const merged: MonthlySkuSeries = {};
+  sources.forEach((s) => {
+    if (!s) return;
+    Object.entries(s).forEach(([line, skus]) => {
+      if (!merged[line]) merged[line] = {};
+      Object.entries(skus).forEach(([sku, data]) => {
+        if (!merged[line][sku]) merged[line][sku] = new Array(12).fill(0);
+        data.forEach((v, i) => {
+          merged[line][sku][i] = (merged[line][sku][i] || 0) + (v || 0);
+        });
+      });
+    });
+  });
+  return merged;
+}
 function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [market, setMarket] = useState<"TOTAL" | "KR" | "JP">("TOTAL");
   const fallbackMonthly = useMemo(
@@ -987,6 +1040,16 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
       .then(setCumulativeSkuData)
       .finally(() => setCumulativeSkuLoading(false));
   }, [cumulativeTableMode, cumulativeSkuData, cumulativeSkuLoading]);
+  const [monthlyDrilldownLine, setMonthlyDrilldownLine] = useState<string | null>(null);
+  const [monthlySkuData, setMonthlySkuData] = useState<{ KR: MonthlySkuSeries; JP: MonthlySkuSeries } | null>(null);
+  const [monthlySkuLoading, setMonthlySkuLoading] = useState(false);
+  useEffect(() => {
+    if (!monthlyDrilldownLine || monthlySkuData || monthlySkuLoading) return;
+    setMonthlySkuLoading(true);
+    fetchYearlyBySkuMonthly()
+      .then(setMonthlySkuData)
+      .finally(() => setMonthlySkuLoading(false));
+  }, [monthlyDrilldownLine, monthlySkuData, monthlySkuLoading]);
   const marketMiniTabs = (value: "TOTAL" | "KR" | "JP", onChange: (v: "TOTAL" | "KR" | "JP") => void) => (
     <div className="mini-tabs">
       {(["TOTAL", "KR", "JP"] as const).map((v) => (
@@ -1004,6 +1067,13 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
   const [drilldownLine, setDrilldownLine] = useState<string | null>(null);
   const dailyBySku = mergeBySku(dailySources);
   const skuSeries = drilldownLine ? buildSkuSeries(dailyBySku[drilldownLine], dailyQty?.labels || []) : undefined;
+
+  const monthlySkuSources =
+    market === "KR" ? [monthlySkuData?.KR] : market === "JP" ? [monthlySkuData?.JP] : [monthlySkuData?.KR, monthlySkuData?.JP];
+  const monthlyBySku = mergeMonthlySkuSeries(monthlySkuSources);
+  const monthlySkuSeries = monthlyDrilldownLine
+    ? buildSkuSeries(monthlyBySku[monthlyDrilldownLine], months)
+    : undefined;
 
   const top10TableDailySources =
     top10TableMarket === "KR" ? [krDaily] : top10TableMarket === "JP" ? [jpDaily] : [krDaily, jpDaily];
@@ -1068,6 +1138,7 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
               onClick={() => {
                 setMarket(v);
                 setDrilldownLine(null);
+                setMonthlyDrilldownLine(null);
               }}
               key={v}
             >
@@ -1077,10 +1148,21 @@ function Product({ d, m }: { d: DashboardData | null; m: number }) {
         </div>
       </section>
       <div className="grid">
-        <ChartCard
-          title="상품별 월간 판매 추이 · 1월~12월"
-          series={x?.trends}
-          kind="line"
+        <DrilldownLineChart
+          title={
+            monthlyDrilldownLine
+              ? `${monthlyDrilldownLine} · SKU별 월간 판매 추이 · 1월~12월${monthlySkuLoading ? " (불러오는 중...)" : ""}`
+              : "상품별 월간 판매 추이 · 1월~12월"
+          }
+          series={monthlyDrilldownLine ? monthlySkuSeries : x?.trends}
+          onLegendClick={monthlyDrilldownLine ? undefined : (label) => setMonthlyDrilldownLine(label)}
+          actions={
+            monthlyDrilldownLine ? (
+              <button className="drilldown-back" onClick={() => setMonthlyDrilldownLine(null)}>
+                ← 전체 라인 보기
+              </button>
+            ) : undefined
+          }
           wide
         />
         <DrilldownLineChart
