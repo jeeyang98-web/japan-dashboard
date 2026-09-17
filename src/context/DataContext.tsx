@@ -50,6 +50,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       sales: pick(gp, "sales") || {},
       monthlyTotalTargets: rows(pick(gp, "monthlyTotalTargets")),
       monthlyTotalSales: rows(pick(gp, "monthlyTotalSales")),
+      shopeeDaily: rows(pick(gp, "shopeeDaily")),
     },
     jp: {
       monthlySales: rows(

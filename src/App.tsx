@@ -679,6 +679,40 @@ function Global({ d, m }: { d: DashboardData | null; m: number }) {
           kind="line"
           wide
         />
+        <section className="card wide">
+          <div className="chart-card-head">
+            <h3>{`쇼피 일자별 매출 추이 · ${m}월`}</h3>
+          </div>
+          <p className="detail-caption">
+            쇼피만 "일별매출" 시트에 일자별 데이터가 있어 이 표에 표시됩니다. 나머지 플랫폼(예스스타일/올리브영 US/키오키/앳코스메 홍콩)은 월마감에 월별 수치만 있어 아래 상세 표를 참고해주세요.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>쇼피 매출액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(g?.shopeeDaily || []).length ? (
+                  g!.shopeeDaily!.map((r) => (
+                    <tr key={r.date}>
+                      <td>{`${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`}</td>
+                      <td>{money(r.sales)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={2} className="empty-row">
+                      No data returned
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
         <ChartCard
           title="글로벌 합계 월 목표 vs 실매출"
           series={series(months, [
@@ -789,7 +823,7 @@ function buildDailyLineSeries(sources: (DailyLineQty | undefined)[], limit = 5):
   if (!labels?.length) return undefined;
   const merged: Record<string, number[]> = {};
   sources.forEach((s) => {
-    if (!s) return;
+    if (!s?.series) return;
     Object.entries(s.series).forEach(([name, data]) => {
       if (!merged[name]) merged[name] = new Array(labels.length).fill(0);
       data.forEach((v, i) => {
