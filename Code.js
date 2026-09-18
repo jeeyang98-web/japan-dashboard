@@ -1637,6 +1637,12 @@ function getKoreaFunnelData(month) {
   // 실시간 엔화 매출을 월별 평균 환율로 환산해서 쓴다 (getQoo10DashboardMonthlyKrw_).
   const channelRevenue = getKrChannelRevenueByMonth_(dailyRaw);
   channelRevenue["큐텐"] = getQoo10DashboardMonthlyKrw_();
+  // getKrChannelRevenueByMonth_()는 그룹명에 "합계"가 없으면 계속 열을 읽어
+  // "싱가포르"/"베트남"(쇼피의 국가별 세부 열)까지 별도 채널로 잡아버린다.
+  // 두 열을 빼고, 이미 합산된 쇼피 매출로 대체한다(getKrShopeeMonthlyKrw_).
+  delete channelRevenue["싱가포르"];
+  delete channelRevenue["베트남"];
+  channelRevenue["쇼피"] = getKrShopeeMonthlyKrw_(dailyRaw);
 
   return {
     month: month,
