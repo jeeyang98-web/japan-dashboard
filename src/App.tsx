@@ -785,7 +785,10 @@ function buildProductMarketData(monthly: Record<string, ProductRow[]>) {
   monthKeys.forEach((k) => {
     mergedMonthly[k] = sumProductRows(monthly[k] || []);
   });
-  const top = sumProductRows(monthKeys.flatMap((k) => monthly[k] || []), 5);
+  const allTotals = sumProductRows(monthKeys.flatMap((k) => monthly[k] || []));
+  const top = allTotals.slice(0, 5);
+  const pinned = allTotals.find((p) => p.name === "플래시 스팟 컨실러");
+  if (pinned && !top.some((p) => p.name === pinned.name)) top.push(pinned);
   return {
     trends: {
       labels: months,
