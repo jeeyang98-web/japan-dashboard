@@ -1601,6 +1601,11 @@ function Promotion({ d }: { d: DashboardData | null }) {
           title={`MEGAPO 일별 전환지표${megapoPeriodLabel ? ` · ${megapoPeriodLabel}` : ""}`}
           series={megapoDailyFunnel}
           kind="line"
+          actions={
+            megapoGroups.length > 1
+              ? periodTabs(megapoGroups, megapoSelectedGroups, (g) => toggleGroup(megapoGroups, setMegapoGroupSel, g))
+              : null
+          }
         />
         <ChartCard title="MEGAWARI 분기별 총매출" series={p?.megawariTotals} />
         <ChartCard title="MEGAPO 월별 총매출" series={p?.megapoTotals} />
