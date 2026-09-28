@@ -1341,10 +1341,18 @@ function readJpProductSheetRaw_() {
   let lastLine = "";
   const lines = lineLabels.map(function (label, i) {
     if (label) lastLine = label;
-    return lastLine || names[i];
+    return normalizeJpLineName_(lastLine || names[i]);
   });
 
   return { meta: meta, qtyValues: qtyValues, names: names, lines: lines };
+}
+
+// "상품별 매출" 시트(JP)에서 같은 상품이 다른 라인명으로 적혀 있어 KR
+// 쪽("엔젤릭 새틴 쿠션")과 이름이 달라 TOTAL(KR+JP) 집계 때 합쳐지지 않던
+// 경우를 통일합니다.
+function normalizeJpLineName_(name) {
+  if (name === "엔젤릭 베이스") return "엔젤릭 새틴 쿠션";
+  return name;
 }
 
 function getJpDailyLineQtyByMonth_(month, raw) {
