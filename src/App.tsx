@@ -255,6 +255,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
       jpTargetKrw = jpTargetsKrw[i] || 0,
       jpSalesKrw = monthlyJpKrw[i] || 0,
       jpRate = jpTargetJpy ? (jpSalesJpy / jpTargetJpy) * 100 : 0;
+    const globalTarget = d?.global?.monthlyTotalTargets?.[i] || 0,
+      globalSales = d?.global?.monthlyTotalSales?.[i] || 0,
+      globalRate = globalTarget ? (globalSales / globalTarget) * 100 : 0;
     const rowTotalTarget = combinedTargets[i] || 0,
       rowTotalSales = combinedMonthlySales[i] || 0,
       totalRate = rowTotalTarget ? (rowTotalSales / rowTotalTarget) * 100 : 0;
@@ -269,6 +272,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
       jpTargetKrw: money(jpTargetKrw),
       jpSalesKrw: money(jpSalesKrw),
       jpRate,
+      globalTarget: money(globalTarget),
+      globalSales: money(globalSales),
+      globalRate,
       totalTarget: money(rowTotalTarget),
       totalSales: money(rowTotalSales),
       totalRate,
@@ -281,6 +287,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     jpSalesJpySum = sum(t?.monthlyJpJpy || []),
     jpTargetKrwSum = sum(jpTargetsKrw),
     jpSalesKrwSum = sum(monthlyJpKrw),
+    globalTargetSum = sum(d?.global?.monthlyTotalTargets || []),
+    globalSalesSum = sum(d?.global?.monthlyTotalSales || []),
     totalTargetSum = sum(combinedTargets),
     totalSalesSum = sum(combinedMonthlySales);
   const monthlyDetailTotal = {
@@ -292,6 +300,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     jpTargetKrw: money(jpTargetKrwSum),
     jpSalesKrw: money(jpSalesKrwSum),
     jpRate: jpTargetJpySum ? (jpSalesJpySum / jpTargetJpySum) * 100 : 0,
+    globalTarget: money(globalTargetSum),
+    globalSales: money(globalSalesSum),
+    globalRate: globalTargetSum ? (globalSalesSum / globalTargetSum) * 100 : 0,
     totalTarget: money(totalTargetSum),
     totalSales: money(totalSalesSum),
     totalRate: totalTargetSum ? (totalSalesSum / totalTargetSum) * 100 : 0,
@@ -396,6 +407,7 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
                   <th rowSpan={2}>환율 JPY→KRW</th>
                   <th colSpan={3} className="group-kr">국내 (KRW)</th>
                   <th colSpan={5} className="group-jp">일본</th>
+                  <th colSpan={3} className="group-global">글로벌 (KRW)</th>
                   <th colSpan={3} className="group-total">전체 (KRW)</th>
                 </tr>
                 <tr>
@@ -407,6 +419,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
                   <th className="group-jp">목표 (KRW)</th>
                   <th className="group-jp">실매출 (KRW)</th>
                   <th className="group-jp">달성률</th>
+                  <th className="group-global">목표</th>
+                  <th className="group-global">실매출</th>
+                  <th className="group-global">달성률</th>
                   <th className="group-total">목표</th>
                   <th className="group-total">실매출</th>
                   <th className="group-total">달성률</th>
@@ -425,6 +440,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
                     <td>{row.jpTargetKrw}</td>
                     <td>{row.jpSalesKrw}</td>
                     <td className={row.jpRate >= 90 ? "rate-good" : "rate-bad"}>{row.jpRate.toFixed(1)}%</td>
+                    <td>{row.globalTarget}</td>
+                    <td>{row.globalSales}</td>
+                    <td className={row.globalRate >= 90 ? "rate-good" : "rate-bad"}>{row.globalRate.toFixed(1)}%</td>
                     <td>{row.totalTarget}</td>
                     <td>{row.totalSales}</td>
                     <td className={row.totalRate >= 90 ? "rate-good" : "rate-bad"}>{row.totalRate.toFixed(1)}%</td>
@@ -446,6 +464,11 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
                   <td>{monthlyDetailTotal.jpSalesKrw}</td>
                   <td className={monthlyDetailTotal.jpRate >= 90 ? "rate-good" : "rate-bad"}>
                     {monthlyDetailTotal.jpRate.toFixed(1)}%
+                  </td>
+                  <td>{monthlyDetailTotal.globalTarget}</td>
+                  <td>{monthlyDetailTotal.globalSales}</td>
+                  <td className={monthlyDetailTotal.globalRate >= 90 ? "rate-good" : "rate-bad"}>
+                    {monthlyDetailTotal.globalRate.toFixed(1)}%
                   </td>
                   <td>{monthlyDetailTotal.totalTarget}</td>
                   <td>{monthlyDetailTotal.totalSales}</td>
