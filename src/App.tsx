@@ -274,6 +274,28 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
       totalRate,
     };
   });
+  const sum = (arr: number[]) => arr.reduce((a, v) => a + (v || 0), 0);
+  const krTargetSum = sum(krTargets),
+    krSalesSum = sum(t?.monthlyKr || []),
+    jpTargetJpySum = sum(jpApi?.targets || []),
+    jpSalesJpySum = sum(t?.monthlyJpJpy || []),
+    jpTargetKrwSum = sum(jpTargetsKrw),
+    jpSalesKrwSum = sum(monthlyJpKrw),
+    totalTargetSum = sum(combinedTargets),
+    totalSalesSum = sum(combinedMonthlySales);
+  const monthlyDetailTotal = {
+    krTarget: money(krTargetSum),
+    krSales: money(krSalesSum),
+    krRate: krTargetSum ? (krSalesSum / krTargetSum) * 100 : 0,
+    jpTargetJpy: money(jpTargetJpySum, "JPY"),
+    jpSalesJpy: money(jpSalesJpySum, "JPY"),
+    jpTargetKrw: money(jpTargetKrwSum),
+    jpSalesKrw: money(jpSalesKrwSum),
+    jpRate: jpTargetJpySum ? (jpSalesJpySum / jpTargetJpySum) * 100 : 0,
+    totalTarget: money(totalTargetSum),
+    totalSales: money(totalSalesSum),
+    totalRate: totalTargetSum ? (totalSalesSum / totalTargetSum) * 100 : 0,
+  };
 
   return (
     <>
@@ -409,6 +431,29 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="total-row">
+                  <td>합계</td>
+                  <td>—</td>
+                  <td>{monthlyDetailTotal.krTarget}</td>
+                  <td>{monthlyDetailTotal.krSales}</td>
+                  <td className={monthlyDetailTotal.krRate >= 90 ? "rate-good" : "rate-bad"}>
+                    {monthlyDetailTotal.krRate.toFixed(1)}%
+                  </td>
+                  <td>{monthlyDetailTotal.jpTargetJpy}</td>
+                  <td>{monthlyDetailTotal.jpSalesJpy}</td>
+                  <td>{monthlyDetailTotal.jpTargetKrw}</td>
+                  <td>{monthlyDetailTotal.jpSalesKrw}</td>
+                  <td className={monthlyDetailTotal.jpRate >= 90 ? "rate-good" : "rate-bad"}>
+                    {monthlyDetailTotal.jpRate.toFixed(1)}%
+                  </td>
+                  <td>{monthlyDetailTotal.totalTarget}</td>
+                  <td>{monthlyDetailTotal.totalSales}</td>
+                  <td className={monthlyDetailTotal.totalRate >= 90 ? "rate-good" : "rate-bad"}>
+                    {monthlyDetailTotal.totalRate.toFixed(1)}%
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </section>
