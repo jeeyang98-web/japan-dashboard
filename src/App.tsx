@@ -216,7 +216,9 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     rate = d?.exchangeRates?.[String(m)] || 0,
     kr = t?.monthlyKr?.[m - 1] || 0,
     jp = t?.monthlyJpKrw?.[m - 1] ?? (t?.monthlyJpJpy?.[m - 1] || 0) * rate,
-    total = kr + jp;
+    globalMonthlySales = d?.global?.monthlyTotalSales || [],
+    globalTargets = d?.global?.monthlyTotalTargets || [],
+    total = kr + jp + (globalMonthlySales[m - 1] || 0);
 
   const krTargets = t?.targets || [];
   // JP 목표는 현재 선택된 월 하나만 라이브 API가 채워주고 나머지 달은 0으로 옵니다
@@ -224,7 +226,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
   const jpTargetsKrw = months.map((_, i) =>
     Math.round((jpApi?.targets?.[i] || 0) * (d?.exchangeRates?.[String(i + 1)] || 0)),
   );
-  const combinedTargets = krTargets.map((v, i) => v + (jpTargetsKrw[i] || 0));
+  // 통합(전체) 수치는 국내 + 일본 + 글로벌(예스스타일/올리브영 US/키오키/쇼피/앳코스메 홍콩) 합입니다.
+  const combinedTargets = krTargets.map((v, i) => v + (jpTargetsKrw[i] || 0) + (globalTargets[i] || 0));
 
   const monthlyJpKrw = t?.monthlyJpKrw?.length
     ? t.monthlyJpKrw
@@ -232,17 +235,16 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         (v, i) => v * (d?.exchangeRates?.[String(i + 1)] || 0),
       );
   const combinedMonthlySales = (t?.monthlyKr || []).map(
-    (v, i) => v + (monthlyJpKrw[i] || 0),
+    (v, i) => v + (monthlyJpKrw[i] || 0) + (globalMonthlySales[i] || 0),
   );
 
   const krYtd = (t?.monthlyKr || []).slice(0, m).reduce((a, v) => a + v, 0);
   const jpYtdKrw = monthlyJpKrw.slice(0, m).reduce((a, v) => a + v, 0);
-  const totalYtd = krYtd + jpYtdKrw;
+  const globalYtd = globalMonthlySales.slice(0, m).reduce((a, v) => a + (v || 0), 0);
+  const totalYtd = krYtd + jpYtdKrw + globalYtd;
 
-  const krCumSales = cumulative(t?.monthlyKr || []);
-  const krCumTargets = cumulative(krTargets);
-  const jpCumSalesKrw = cumulative(monthlyJpKrw);
-  const jpCumTargetsKrw = cumulative(jpTargetsKrw);
+  const combinedCumTargets = cumulative(combinedTargets);
+  const combinedCumSales = cumulative(combinedMonthlySales);
 
   const totalProductRows = (t?.products?.[String(m)] || []).slice(0, 12);
 
@@ -255,11 +257,11 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
       jpTargetKrw = jpTargetsKrw[i] || 0,
       jpSalesKrw = monthlyJpKrw[i] || 0,
       jpRate = jpTargetJpy ? (jpSalesJpy / jpTargetJpy) * 100 : 0;
-    const globalTarget = d?.global?.monthlyTotalTargets?.[i] || 0,
-      globalSales = d?.global?.monthlyTotalSales?.[i] || 0,
+    const globalTarget = globalTargets[i] || 0,
+      globalSales = globalMonthlySales[i] || 0,
       globalRate = globalTarget ? (globalSales / globalTarget) * 100 : 0;
-    const rowTotalTarget = (combinedTargets[i] || 0) + globalTarget,
-      rowTotalSales = (combinedMonthlySales[i] || 0) + globalSales,
+    const rowTotalTarget = combinedTargets[i] || 0,
+      rowTotalSales = combinedMonthlySales[i] || 0,
       totalRate = rowTotalTarget ? (rowTotalSales / rowTotalTarget) * 100 : 0;
     return {
       월: label,
@@ -287,10 +289,10 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     jpSalesJpySum = sum(t?.monthlyJpJpy || []),
     jpTargetKrwSum = sum(jpTargetsKrw),
     jpSalesKrwSum = sum(monthlyJpKrw),
-    globalTargetSum = sum(d?.global?.monthlyTotalTargets || []),
-    globalSalesSum = sum(d?.global?.monthlyTotalSales || []),
-    totalTargetSum = sum(combinedTargets) + globalTargetSum,
-    totalSalesSum = sum(combinedMonthlySales) + globalSalesSum;
+    globalTargetSum = sum(globalTargets),
+    globalSalesSum = sum(globalMonthlySales),
+    totalTargetSum = sum(combinedTargets),
+    totalSalesSum = sum(combinedMonthlySales);
   const monthlyDetailTotal = {
     krTarget: money(krTargetSum),
     krSales: money(krSalesSum),
@@ -383,13 +385,11 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           ])}
         />
         <ChartCard
-          title="국가별 누계 목표 vs 누계 실매출"
+          title="전체 누계 목표 vs 누계 실매출"
           kind="line"
           series={series(months, [
-            { label: "KR 누계 목표", data: krCumTargets, color: "#b7b9c4" },
-            { label: "KR 누계 실매출", data: krCumSales, color: "#5a4ff3" },
-            { label: "JP 누계 목표(KRW)", data: jpCumTargetsKrw, color: "#c9c7ff" },
-            { label: "JP 누계 실매출(KRW)", data: jpCumSalesKrw, color: "#ef4c8b" },
+            { label: "전체 누계 목표", data: combinedCumTargets, color: "#b7b9c4" },
+            { label: "전체 누계 실매출", data: combinedCumSales, color: "#5a4ff3" },
           ])}
         />
         <ChartCard
