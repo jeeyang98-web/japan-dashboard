@@ -51,6 +51,7 @@ function normalize(bundle: DashboardApiBundle): DashboardData {
       monthlyTotalTargets: rows(pick(gp, "monthlyTotalTargets")),
       monthlyTotalSales: rows(pick(gp, "monthlyTotalSales")),
       shopeeDaily: rows(pick(gp, "shopeeDaily")),
+      shopeeOrders: rows(pick(gp, "shopeeOrders")),
     },
     jp: {
       monthlySales: rows(

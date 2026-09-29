@@ -393,10 +393,11 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           ])}
         />
         <ChartCard
-          title="월별 구매 건수 · KR + JP"
+          title="월별 구매 건수 · KR + JP + 쇼피"
           series={series(months, [
             { label: "KR 구매 건수", data: t?.ordersKr, color: "#5a4ff3" },
             { label: "JP 구매 건수", data: t?.ordersJp, color: "#c9c7ff" },
+            { label: "쇼피 구매 건수", data: d?.global?.shopeeOrders, color: "#24b47e" },
           ])}
           stacked
         />

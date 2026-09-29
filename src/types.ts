@@ -47,6 +47,7 @@ export type DashboardData = {
     monthlyTotalTargets: number[];
     monthlyTotalSales: number[];
     shopeeDaily?: { date: string; sales: number }[];
+    shopeeOrders?: number[];
   };
   jp?: {
     monthlySales: number[];
