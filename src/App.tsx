@@ -258,8 +258,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     const globalTarget = d?.global?.monthlyTotalTargets?.[i] || 0,
       globalSales = d?.global?.monthlyTotalSales?.[i] || 0,
       globalRate = globalTarget ? (globalSales / globalTarget) * 100 : 0;
-    const rowTotalTarget = combinedTargets[i] || 0,
-      rowTotalSales = combinedMonthlySales[i] || 0,
+    const rowTotalTarget = (combinedTargets[i] || 0) + globalTarget,
+      rowTotalSales = (combinedMonthlySales[i] || 0) + globalSales,
       totalRate = rowTotalTarget ? (rowTotalSales / rowTotalTarget) * 100 : 0;
     return {
       월: label,
@@ -289,8 +289,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     jpSalesKrwSum = sum(monthlyJpKrw),
     globalTargetSum = sum(d?.global?.monthlyTotalTargets || []),
     globalSalesSum = sum(d?.global?.monthlyTotalSales || []),
-    totalTargetSum = sum(combinedTargets),
-    totalSalesSum = sum(combinedMonthlySales);
+    totalTargetSum = sum(combinedTargets) + globalTargetSum,
+    totalSalesSum = sum(combinedMonthlySales) + globalSalesSum;
   const monthlyDetailTotal = {
     krTarget: money(krTargetSum),
     krSales: money(krSalesSum),
