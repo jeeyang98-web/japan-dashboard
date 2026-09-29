@@ -1338,6 +1338,55 @@ function dailyFunnelSeries(rows?: DailyFunnelRow[]): Series | undefined {
     ],
   };
 }
+const FUNNEL_METRICS = [
+  { key: "traffic", label: "유입자수" },
+  { key: "cart", label: "장바구니" },
+  { key: "orders", label: "주문완료" },
+  { key: "conversionRate", label: "주문전환율(%)" },
+] as const;
+type FunnelMetricKey = (typeof FUNNEL_METRICS)[number]["key"];
+// 기간을 1개만 고르면 기존처럼 지표 4개를 한 차트에(축 2개로) 보여주고,
+// 2개 이상 고르면 지표 하나를 골라(metric select) 기간별로 겹쳐 그린다
+// (일별 상품별 판매 추이의 다기간 비교와 같은 day1/day2/... 축 방식).
+function funnelCompareChart(
+  byPeriod: Record<string, { period: string; dailyFunnel: DailyFunnelRow[] }> | undefined,
+  hasByPeriod: boolean,
+  fallbackRaw: DailyFunnelRow[] | undefined,
+  selectedGroups: string[],
+  metric: FunnelMetricKey,
+  setMetric: (v: FunnelMetricKey) => void,
+) {
+  if (selectedGroups.length <= 1) {
+    const raw = hasByPeriod ? byPeriod?.[selectedGroups[0]]?.dailyFunnel : fallbackRaw;
+    return { series: dailyFunnelSeries(raw), controls: null };
+  }
+  const perGroup = selectedGroups.map((g) => {
+    const rows = byPeriod?.[g]?.dailyFunnel || [];
+    return { g, period: byPeriod?.[g]?.period || "", data: rows.map((r) => r[metric]) };
+  });
+  const maxLen = Math.max(0, ...perGroup.map((p) => p.data.length));
+  const series: Series | undefined = maxLen
+    ? {
+        labels: Array.from({ length: maxLen }, (_, i) => `day${i + 1}`),
+        datasets: perGroup.map((p, i) => ({
+          label: `${p.g} · ${p.period}`,
+          data: p.data,
+          borderColor: productChartColors[i % productChartColors.length],
+          backgroundColor: productChartColors[i % productChartColors.length],
+        })),
+      }
+    : undefined;
+  const controls = (
+    <select className="rank-line-select" value={metric} onChange={(e) => setMetric(e.target.value as FunnelMetricKey)}>
+      {FUNNEL_METRICS.map((m) => (
+        <option value={m.key} key={m.key}>
+          {m.label}
+        </option>
+      ))}
+    </select>
+  );
+  return { series, controls };
+}
 function Promotion({ d }: { d: DashboardData | null }) {
   const api = d?.promotion;
   const megawari = api?.megawariCampaigns?.length ? api.megawariCampaigns : megawariCampaigns;
@@ -1396,10 +1445,8 @@ function Promotion({ d }: { d: DashboardData | null }) {
   const megapoPeriodLabel =
     megapoPeriodData?.period ??
     (hasMegapoByPeriod ? megapo.find((c) => c.group === megapoActiveGroup)?.period : api?.megapoPeriod);
-  const megawariDailyFunnel = dailyFunnelSeries(
-    hasMegawariByPeriod ? megawariPeriodData?.dailyFunnel : api?.megawariDailyFunnel,
-  );
-  const megapoDailyFunnel = dailyFunnelSeries(hasMegapoByPeriod ? megapoPeriodData?.dailyFunnel : api?.megapoDailyFunnel);
+  const [megawariFunnelMetric, setMegawariFunnelMetric] = useState<FunnelMetricKey>("traffic");
+  const [megapoFunnelMetric, setMegapoFunnelMetric] = useState<FunnelMetricKey>("traffic");
   const periodTabs = (groups: string[], selected: string[], onToggle: (g: string) => void) => (
     <div className="mini-tabs">
       {groups.map((g) => (
@@ -1530,6 +1577,22 @@ function Promotion({ d }: { d: DashboardData | null }) {
     megapoTrendSel,
     setMegapoTrendSel,
   );
+  const megawariFunnel = funnelCompareChart(
+    api?.megawariByPeriod,
+    hasMegawariByPeriod,
+    api?.megawariDailyFunnel,
+    megawariSelectedGroups,
+    megawariFunnelMetric,
+    setMegawariFunnelMetric,
+  );
+  const megapoFunnel = funnelCompareChart(
+    api?.megapoByPeriod,
+    hasMegapoByPeriod,
+    api?.megapoDailyFunnel,
+    megapoSelectedGroups,
+    megapoFunnelMetric,
+    setMegapoFunnelMetric,
+  );
   const megawariTrendTitle =
     megawariSelectedGroups.length > 1
       ? ` · ${megawariSelectedGroups.length}개 기간 비교`
@@ -1593,18 +1656,31 @@ function Promotion({ d }: { d: DashboardData | null }) {
           }
         />
         <ChartCard
-          title={`MEGAWARI 일별 전환지표${megawariPeriodLabel ? ` · ${megawariPeriodLabel}` : ""}`}
-          series={megawariDailyFunnel}
-          kind="line"
-        />
-        <ChartCard
-          title={`MEGAPO 일별 전환지표${megapoPeriodLabel ? ` · ${megapoPeriodLabel}` : ""}`}
-          series={megapoDailyFunnel}
+          title={`MEGAWARI 일별 전환지표${megawariTrendTitle}`}
+          series={megawariFunnel.series}
           kind="line"
           actions={
-            megapoGroups.length > 1
-              ? periodTabs(megapoGroups, megapoSelectedGroups, (g) => toggleGroup(megapoGroups, setMegapoGroupSel, g))
-              : null
+            <div className="rank-controls">
+              {megawariGroups.length > 1
+                ? periodTabs(megawariGroups, megawariSelectedGroups, (g) =>
+                    toggleGroup(megawariGroups, setMegawariGroupSel, g),
+                  )
+                : null}
+              {megawariFunnel.controls}
+            </div>
+          }
+        />
+        <ChartCard
+          title={`MEGAPO 일별 전환지표${megapoTrendTitle}`}
+          series={megapoFunnel.series}
+          kind="line"
+          actions={
+            <div className="rank-controls">
+              {megapoGroups.length > 1
+                ? periodTabs(megapoGroups, megapoSelectedGroups, (g) => toggleGroup(megapoGroups, setMegapoGroupSel, g))
+                : null}
+              {megapoFunnel.controls}
+            </div>
           }
         />
         <ChartCard title="MEGAWARI 분기별 총매출" series={p?.megawariTotals} />
