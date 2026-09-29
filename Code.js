@@ -1009,6 +1009,8 @@ function getGlobalPlatformData(month) {
   sales["쇼피"] = getKrShopeeMonthlyKrw_(dailyRaw);
   // "일자별 매출 추이" 표용 - 쇼피만 일별 데이터가 있어 선택한 달만 따로 반환.
   const shopeeDaily = getKrShopeeDailyForMonth_(month, dailyRaw);
+  // "월별 구매 건수" 차트용 - 쇼피 구매 건수(싱가포르+베트남 판매수량).
+  const shopeeOrders = getKrShopeeOrdersByMonth_(dailyRaw);
 
   const monthlyTotalTargets = new Array(12).fill(0);
   const monthlyTotalSales = new Array(12).fill(0);
@@ -1028,6 +1030,7 @@ function getGlobalPlatformData(month) {
     monthlyTotalTargets: monthlyTotalTargets,
     monthlyTotalSales: monthlyTotalSales,
     shopeeDaily: shopeeDaily,
+    shopeeOrders: shopeeOrders,
     generatedAt: Utilities.formatDate(
       new Date(),
       "Asia/Seoul",
@@ -1784,6 +1787,31 @@ function getKrShopeeDailyForMonth_(month, raw) {
   }
 
   return result;
+}
+
+/**
+ * "일별매출" 시트의 AH/AJ열(쇼피 - 싱가포르/베트남 판매수량)을 더해 쇼피
+ * 월별 구매 건수를 날짜 기준으로 합산합니다. 이 시트에는 채널별 "주문건수"
+ * 열이 따로 없는 채널이 대부분이라(네이버/29CM/큐텐만 있음), 쇼피는
+ * 판매수량을 구매 건수로 씁니다. "월별 구매 건수" 차트용.
+ */
+function getKrShopeeOrdersByMonth_(raw) {
+  const totals = new Array(12).fill(0);
+  const data = raw || readKrDailySheetRaw_();
+  const values = data.values;
+  const headerRow = data.headerRow;
+  if (headerRow < 0) return totals;
+
+  for (let r = headerRow + 1; r < values.length; r++) {
+    const date = String(values[r][0] || "");
+    const match = date.match(/^\d{4}-(\d{2})-\d{2}/);
+    if (!match) continue;
+    const m = Number(match[1]);
+    if (m < 1 || m > 12) continue;
+    totals[m - 1] += toNumber_(values[r][33]) + toNumber_(values[r][35]); // AH 싱가포르 + AJ 베트남 판매수량
+  }
+
+  return totals;
 }
 
 function dateToYmd_(value) {
