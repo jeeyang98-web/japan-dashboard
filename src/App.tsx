@@ -210,7 +210,7 @@ const cumulative = (arr: number[]) =>
   arr.reduce<number[]>((acc, v, i) => [...acc, (acc[i - 1] || 0) + v], []);
 
 function Total({ d, m }: { d: DashboardData | null; m: number }) {
-  const [trendMarket, setTrendMarket] = useState<"ALL" | "KR" | "JP">("ALL");
+  const [trendMarket, setTrendMarket] = useState<"ALL" | "KR" | "JP" | "GLOBAL">("ALL");
   const t = d?.total,
     jpApi = d?.jp,
     rate = d?.exchangeRates?.[String(m)] || 0,
@@ -334,32 +334,37 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         <ChartCard
           title={
             trendMarket === "ALL"
-              ? "월별 전체 매출 추이 · 국내 + 일본"
+              ? "월별 전체 매출 추이 · 국내 + 일본 + 글로벌"
               : trendMarket === "KR"
                 ? "월별 매출 추이 · 국내"
-                : "월별 매출 추이 · 일본"
+                : trendMarket === "JP"
+                  ? "월별 매출 추이 · 일본"
+                  : "월별 매출 추이 · 글로벌"
           }
           series={
             trendMarket === "KR"
               ? series(months, [{ label: "국내", data: t?.monthlyKr, color: "#5a4ff3" }])
               : trendMarket === "JP"
                 ? series(months, [{ label: "일본", data: monthlyJpKrw, color: "#ef4c8b" }])
-                : series(months, [
-                    { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
-                    { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
-                  ])
+                : trendMarket === "GLOBAL"
+                  ? series(months, [{ label: "글로벌", data: d?.global?.monthlyTotalSales, color: "#24b47e" }])
+                  : series(months, [
+                      { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
+                      { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
+                      { label: "글로벌", data: d?.global?.monthlyTotalSales, color: "#24b47e" },
+                    ])
           }
           wide
           stacked={trendMarket === "ALL"}
           actions={
             <div className="mini-tabs">
-              {(["ALL", "KR", "JP"] as const).map((v) => (
+              {(["ALL", "KR", "JP", "GLOBAL"] as const).map((v) => (
                 <button
                   key={v}
                   className={trendMarket === v ? "active" : ""}
                   onClick={() => setTrendMarket(v)}
                 >
-                  {v === "ALL" ? "전체" : v}
+                  {v === "ALL" ? "전체" : v === "GLOBAL" ? "글로벌" : v}
                 </button>
               ))}
             </div>
