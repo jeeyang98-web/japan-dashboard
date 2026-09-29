@@ -1731,12 +1731,13 @@ function getKrChannelRevenueByMonth_(raw) {
 }
 
 /**
- * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 AF~AJ열(쇼피 - 싱가포르/베트남
- * 국가별 판매수량·매출액과 그 합계)에서 쇼피 월별 매출액(KRW)을 날짜 기준으로
- * 합산합니다. AJ열이 이미 싱가포르(AG)+베트남(AI) 합계(매출액_vat제외,
- * 배송비 포함)라 그대로 씁니다. "월마감" 글로벌 섹션의 쇼피 매출액 열은
- * 마감 전까지 비어있어(getGlobalPlatformData_의 다른 4개 플랫폼과 같은
- * 한계) 진행 중인 달이 반영 안 되므로, 매일 쌓이는 이 시트로 대체합니다
+ * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 AI/AK열(쇼피 - 싱가포르/베트남
+ * 매출액)을 더해 쇼피 월별 매출액(KRW)을 날짜 기준으로 합산합니다.
+ * 시트에 열이 추가/이동될 때마다 밀릴 수 있어 "SO 합계"(AL) 같은 합계
+ * 열을 그대로 믿지 않고, 싱가포르(AI)·베트남(AK) 매출액 열을 직접 더합니다.
+ * "월마감" 글로벌 섹션의 쇼피 매출액 열은 마감 전까지 비어있어
+ * (getGlobalPlatformData_의 다른 4개 플랫폼과 같은 한계) 진행 중인 달이
+ * 반영 안 되므로, 매일 쌓이는 이 시트로 대체합니다
  * (getQoo10DashboardMonthlyKrw_와 같은 이유).
  */
 function getKrShopeeMonthlyKrw_(raw) {
@@ -1752,7 +1753,7 @@ function getKrShopeeMonthlyKrw_(raw) {
     if (!match) continue;
     const m = Number(match[1]);
     if (m < 1 || m > 12) continue;
-    totals[m - 1] += toNumber_(values[r][35]); // AJ: 쇼피 합계 매출액
+    totals[m - 1] += toNumber_(values[r][34]) + toNumber_(values[r][36]); // AI 싱가포르 + AK 베트남 매출액
   }
 
   return totals;
@@ -1778,7 +1779,7 @@ function getKrShopeeDailyForMonth_(month, raw) {
     if (Number(match[2]) !== month) continue;
     result.push({
       date: match[1] + "-" + match[2] + "-" + match[3],
-      sales: toNumber_(values[r][35]) // AJ: 쇼피 합계 매출액
+      sales: toNumber_(values[r][34]) + toNumber_(values[r][36]) // AI 싱가포르 + AK 베트남 매출액
     });
   }
 
