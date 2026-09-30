@@ -43,8 +43,8 @@ type Page =
   | "planning";
 const nav: [string, Page, any][] = [
   ["Total Business", "total", Globe2],
-  ["JP Executive", "jp", MapIcon],
   ["KR Executive", "kr", BarChart3],
+  ["JP Executive", "jp", MapIcon],
   ["GLOBAL Executive", "global", Compass],
   ["Product", "product", Box],
   ["Promotion", "promotion", Flame],
