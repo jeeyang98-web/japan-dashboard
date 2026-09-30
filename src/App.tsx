@@ -209,8 +209,24 @@ function PageView({
 const cumulative = (arr: number[]) =>
   arr.reduce<number[]>((acc, v, i) => [...acc, (acc[i - 1] || 0) + v], []);
 
+type Market = "ALL" | "KR" | "JP" | "GLOBAL";
+const MARKET_BUTTON_LABELS: Record<Market, string> = { ALL: "전체", KR: "KR", JP: "JP", GLOBAL: "글로벌" };
+const MARKET_SERIES_LABELS: Record<Market, string> = { ALL: "전체", KR: "국내", JP: "일본", GLOBAL: "글로벌" };
+function marketTabs(value: Market, onChange: (v: Market) => void) {
+  return (
+    <div className="mini-tabs">
+      {(["ALL", "KR", "JP", "GLOBAL"] as const).map((v) => (
+        <button key={v} className={value === v ? "active" : ""} onClick={() => onChange(v)}>
+          {MARKET_BUTTON_LABELS[v]}
+        </button>
+      ))}
+    </div>
+  );
+}
 function Total({ d, m }: { d: DashboardData | null; m: number }) {
-  const [trendMarket, setTrendMarket] = useState<"ALL" | "KR" | "JP" | "GLOBAL">("ALL");
+  const [trendMarket, setTrendMarket] = useState<Market>("ALL");
+  const [ytdMarket, setYtdMarket] = useState<Market>("ALL");
+  const [cumMarket, setCumMarket] = useState<Market>("ALL");
   const t = d?.total,
     jpApi = d?.jp,
     rate = d?.exchangeRates?.[String(m)] || 0,
@@ -243,8 +259,18 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
   const globalYtd = globalMonthlySales.slice(0, m).reduce((a, v) => a + (v || 0), 0);
   const totalYtd = krYtd + jpYtdKrw + globalYtd;
 
-  const combinedCumTargets = cumulative(combinedTargets);
-  const combinedCumSales = cumulative(combinedMonthlySales);
+  const marketTargets: Record<Market, number[]> = {
+    ALL: combinedTargets,
+    KR: krTargets,
+    JP: jpTargetsKrw,
+    GLOBAL: globalTargets,
+  };
+  const marketSales: Record<Market, number[]> = {
+    ALL: combinedMonthlySales,
+    KR: t?.monthlyKr || [],
+    JP: monthlyJpKrw,
+    GLOBAL: globalMonthlySales,
+  };
 
   const totalProductRows = (t?.products?.[String(m)] || []).slice(0, 12);
 
@@ -337,40 +363,20 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           title={
             trendMarket === "ALL"
               ? "월별 전체 매출 추이 · 국내 + 일본 + 글로벌"
-              : trendMarket === "KR"
-                ? "월별 매출 추이 · 국내"
-                : trendMarket === "JP"
-                  ? "월별 매출 추이 · 일본"
-                  : "월별 매출 추이 · 글로벌"
+              : `월별 매출 추이 · ${MARKET_SERIES_LABELS[trendMarket]}`
           }
           series={
-            trendMarket === "KR"
-              ? series(months, [{ label: "국내", data: t?.monthlyKr, color: "#5a4ff3" }])
-              : trendMarket === "JP"
-                ? series(months, [{ label: "일본", data: monthlyJpKrw, color: "#ef4c8b" }])
-                : trendMarket === "GLOBAL"
-                  ? series(months, [{ label: "글로벌", data: d?.global?.monthlyTotalSales, color: "#24b47e" }])
-                  : series(months, [
-                      { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
-                      { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
-                      { label: "글로벌", data: d?.global?.monthlyTotalSales, color: "#24b47e" },
-                    ])
+            trendMarket === "ALL"
+              ? series(months, [
+                  { label: "국내", data: t?.monthlyKr, color: "#5a4ff3" },
+                  { label: "일본", data: monthlyJpKrw, color: "#c9c7ff" },
+                  { label: "글로벌", data: globalMonthlySales, color: "#24b47e" },
+                ])
+              : series(months, [{ label: MARKET_SERIES_LABELS[trendMarket], data: marketSales[trendMarket], color: "#5a4ff3" }])
           }
           wide
           stacked={trendMarket === "ALL"}
-          actions={
-            <div className="mini-tabs">
-              {(["ALL", "KR", "JP", "GLOBAL"] as const).map((v) => (
-                <button
-                  key={v}
-                  className={trendMarket === v ? "active" : ""}
-                  onClick={() => setTrendMarket(v)}
-                >
-                  {v === "ALL" ? "전체" : v === "GLOBAL" ? "글로벌" : v}
-                </button>
-              ))}
-            </div>
-          }
+          actions={marketTabs(trendMarket, setTrendMarket)}
         />
         <ChartCard
           title="채널별 월별 매출 추이(매출액+배송비)"
@@ -378,19 +384,29 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
           kind="line"
         />
         <ChartCard
-          title="YTD 월 목표 vs 실매출"
+          title={
+            ytdMarket === "ALL"
+              ? "YTD 월 목표 vs 실매출"
+              : `YTD 월 목표 vs 실매출 · ${MARKET_SERIES_LABELS[ytdMarket]}`
+          }
           series={series(months, [
-            { label: "전체 목표", data: combinedTargets, color: "#dfe0e8" },
-            { label: "전체 실매출", data: combinedMonthlySales, color: "#5a4ff3" },
+            { label: `${MARKET_SERIES_LABELS[ytdMarket]} 목표`, data: marketTargets[ytdMarket], color: "#dfe0e8" },
+            { label: `${MARKET_SERIES_LABELS[ytdMarket]} 실매출`, data: marketSales[ytdMarket], color: "#5a4ff3" },
           ])}
+          actions={marketTabs(ytdMarket, setYtdMarket)}
         />
         <ChartCard
-          title="전체 누계 목표 vs 누계 실매출"
+          title={
+            cumMarket === "ALL"
+              ? "전체 누계 목표 vs 누계 실매출"
+              : `누계 목표 vs 누계 실매출 · ${MARKET_SERIES_LABELS[cumMarket]}`
+          }
           kind="line"
           series={series(months, [
-            { label: "전체 누계 목표", data: combinedCumTargets, color: "#b7b9c4" },
-            { label: "전체 누계 실매출", data: combinedCumSales, color: "#5a4ff3" },
+            { label: `${MARKET_SERIES_LABELS[cumMarket]} 누계 목표`, data: cumulative(marketTargets[cumMarket]), color: "#b7b9c4" },
+            { label: `${MARKET_SERIES_LABELS[cumMarket]} 누계 실매출`, data: cumulative(marketSales[cumMarket]), color: "#5a4ff3" },
           ])}
+          actions={marketTabs(cumMarket, setCumMarket)}
         />
         <ChartCard
           title="월별 구매 건수 · KR + JP + 쇼피"
