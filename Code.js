@@ -828,18 +828,58 @@ function getKrDailySalesByMonth_(raw) {
   }
 }
 
-// B,E,H,K,M,O,Q,S,U열: 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/
-// CJ ENM/시코르. 네이버·29CM은 "주문건수"를, 나머지 채널은 "판매수량"을
-// 그대로 구매건수로 취급합니다(사용자 확인 — 판매수량을 주문건수와
-// 동일하게 봄).
-var KR_DAILY_ORDER_COLS_ = [1, 4, 7, 10, 12, 14, 16, 18, 20];
+// 자사몰/네이버/29CM/카카오/글아몰/아모레/올리브영(SELL-OUT)/CJ ENM/시코르.
+// 네이버·29CM은 "주문건수"를, 나머지 채널은 "판매수량"을 그대로 구매건수로
+// 취급합니다(사용자 확인 — 판매수량을 주문건수와 동일하게 봄). 채널 이름으로
+// 열을 찾아서(getKrDomesticOrderColumns_), 시트에 열이 추가/삭제돼 위치가
+// 밀려도 고정 열 번호처럼 깨지지 않게 합니다.
+var KR_DOMESTIC_ORDER_CHANNELS_ = [
+  "자사몰(cafe24)", "네이버 스마트스토어", "29CM", "카카오 선물하기",
+  "글아몰", "아모레 (성수/부산/용산)", "올리브영\n(SELL-OUT)", "CJ ENM", "시코르"
+];
+
+/**
+ * "일별매출" 시트에서 KR_DOMESTIC_ORDER_CHANNELS_ 각 채널의 구매건수 열
+ * 위치를 헤더 텍스트로 찾습니다. 채널마다 "주문건수" 서브헤더가 있으면
+ * 그 열을, 없으면 "판매수량" 열을 씁니다.
+ */
+function getKrDomesticOrderColumns_(raw) {
+  const cols = [];
+  const data = raw || readKrDailySheetRaw_();
+  const values = data.values;
+  const headerRow = data.headerRow;
+  if (headerRow < 1) return cols;
+
+  const groupHeaderRaw = values[headerRow - 1];
+  const subHeader = values[headerRow];
+
+  let lastGroup = "";
+  const byChannel = {};
+  for (let c = 1; c < subHeader.length; c++) {
+    const g = String(groupHeaderRaw[c] || "").trim();
+    if (g) lastGroup = g;
+    if (KR_DOMESTIC_ORDER_CHANNELS_.indexOf(lastGroup) === -1) continue;
+    const sub = String(subHeader[c] || "").trim();
+    if (!byChannel[lastGroup]) byChannel[lastGroup] = {};
+    if (sub === "주문건수") byChannel[lastGroup].orderCol = c;
+    else if (sub === "판매수량") byChannel[lastGroup].qtyCol = c;
+  }
+
+  KR_DOMESTIC_ORDER_CHANNELS_.forEach(function (name) {
+    const entry = byChannel[name];
+    if (!entry) return;
+    const col = entry.orderCol !== undefined ? entry.orderCol : entry.qtyCol;
+    if (col !== undefined) cols.push(col);
+  });
+  return cols;
+}
 
 /**
  * "일별매출" 시트의 일자별 로그 테이블(1월 1일부터 매일 한 행씩 있는 원본
- * 데이터, 23행부터 시작)을 KR_DAILY_ORDER_COLS_ 기준으로 월별로 합산해서
- * 12개월치 국내 구매건수를 구합니다. "월마감" 같은 별도 마감 요약표와
- * 달리 이 로그는 매일 실시간으로 쌓이기 때문에, 마감 여부와 상관없이
- * 1월부터 오늘까지 전부 반영됩니다.
+ * 데이터, 23행부터 시작)을 채널별 구매건수 열(getKrDomesticOrderColumns_)
+ * 기준으로 월별로 합산해서 12개월치 국내 구매건수를 구합니다. "월마감"
+ * 같은 별도 마감 요약표와 달리 이 로그는 매일 실시간으로 쌓이기 때문에,
+ * 마감 여부와 상관없이 1월부터 오늘까지 전부 반영됩니다.
  */
 function getKrMonthlyOrdersFromDailyLog_(raw) {
   const totals = new Array(12).fill(0);
@@ -848,6 +888,7 @@ function getKrMonthlyOrdersFromDailyLog_(raw) {
     const values = data.values;
     const headerRow = data.headerRow;
     if (headerRow === -1) return totals;
+    const cols = getKrDomesticOrderColumns_(data);
 
     for (let r = headerRow + 1; r < values.length; r++) {
       const date = String(values[r][0] || "");
@@ -855,7 +896,7 @@ function getKrMonthlyOrdersFromDailyLog_(raw) {
       if (!match) continue;
       const m = Number(match[1]);
       if (m < 1 || m > 12) continue;
-      KR_DAILY_ORDER_COLS_.forEach(function (c) { totals[m - 1] += toNumber_(values[r][c]); });
+      cols.forEach(function (c) { totals[m - 1] += toNumber_(values[r][c]); });
     }
     return totals;
   } catch (err) {
