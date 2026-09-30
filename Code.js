@@ -1734,10 +1734,37 @@ function getKrChannelRevenueByMonth_(raw) {
 }
 
 /**
- * "일별매출" 시트(KR_DAILY_SHEET_GID_)의 AI/AK열(쇼피 - 싱가포르/베트남
- * 매출액)을 더해 쇼피 월별 매출액(KRW)을 날짜 기준으로 합산합니다.
- * 시트에 열이 추가/이동될 때마다 밀릴 수 있어 "SO 합계"(AL) 같은 합계
- * 열을 그대로 믿지 않고, 싱가포르(AI)·베트남(AK) 매출액 열을 직접 더합니다.
+ * "일별매출" 시트에서 "싱가포르"/"베트남" 그룹의 "매출액"/"판매수량" 열
+ * 위치를 헤더 텍스트로 찾습니다. 이 시트는 앞쪽에 열이 추가/삭제될 때마다
+ * 싱가포르/베트남 열이 밀리는 일이 반복돼서(고정 열 번호로는 계속 깨짐),
+ * "국내 채널" 열 스캔(getKrChannelRevenueByMonth_)과 같은 방식으로 그룹
+ * 헤더(forward-fill)와 서브헤더 텍스트를 보고 매번 다시 찾습니다.
+ */
+function getKrShopeeColumns_(raw) {
+  const result = { salesCols: [], orderCols: [] };
+  const data = raw || readKrDailySheetRaw_();
+  const values = data.values;
+  const headerRow = data.headerRow;
+  if (headerRow < 1) return result;
+
+  const groupHeaderRaw = values[headerRow - 1];
+  const subHeader = values[headerRow];
+  let lastGroup = "";
+  for (let c = 0; c < subHeader.length; c++) {
+    const g = String(groupHeaderRaw[c] || "").trim();
+    if (g) lastGroup = g;
+    if (lastGroup !== "싱가포르" && lastGroup !== "베트남") continue;
+    const sub = String(subHeader[c] || "").trim();
+    if (sub === "매출액") result.salesCols.push(c);
+    else if (sub === "판매수량") result.orderCols.push(c);
+  }
+  return result;
+}
+
+/**
+ * "일별매출" 시트의 싱가포르/베트남 매출액 열을 더해 쇼피 월별 매출액
+ * (KRW)을 날짜 기준으로 합산합니다. "SO 합계" 같은 합계 열을 그대로 믿지
+ * 않고 싱가포르·베트남 매출액 열을 직접 더합니다(getKrShopeeColumns_).
  * "월마감" 글로벌 섹션의 쇼피 매출액 열은 마감 전까지 비어있어
  * (getGlobalPlatformData_의 다른 4개 플랫폼과 같은 한계) 진행 중인 달이
  * 반영 안 되므로, 매일 쌓이는 이 시트로 대체합니다
@@ -1749,6 +1776,7 @@ function getKrShopeeMonthlyKrw_(raw) {
   const values = data.values;
   const headerRow = data.headerRow;
   if (headerRow < 0) return totals;
+  const cols = getKrShopeeColumns_(data);
 
   for (let r = headerRow + 1; r < values.length; r++) {
     const date = String(values[r][0] || "");
@@ -1756,7 +1784,7 @@ function getKrShopeeMonthlyKrw_(raw) {
     if (!match) continue;
     const m = Number(match[1]);
     if (m < 1 || m > 12) continue;
-    totals[m - 1] += toNumber_(values[r][34]) + toNumber_(values[r][36]); // AI 싱가포르 + AK 베트남 매출액
+    cols.salesCols.forEach(c => { totals[m - 1] += toNumber_(values[r][c]); });
   }
 
   return totals;
@@ -1774,15 +1802,18 @@ function getKrShopeeDailyForMonth_(month, raw) {
   const values = data.values;
   const headerRow = data.headerRow;
   if (headerRow < 0) return result;
+  const cols = getKrShopeeColumns_(data);
 
   for (let r = headerRow + 1; r < values.length; r++) {
     const date = String(values[r][0] || "");
     const match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!match) continue;
     if (Number(match[2]) !== month) continue;
+    let sales = 0;
+    cols.salesCols.forEach(c => { sales += toNumber_(values[r][c]); });
     result.push({
       date: match[1] + "-" + match[2] + "-" + match[3],
-      sales: toNumber_(values[r][34]) + toNumber_(values[r][36]) // AI 싱가포르 + AK 베트남 매출액
+      sales: sales
     });
   }
 
@@ -1790,10 +1821,10 @@ function getKrShopeeDailyForMonth_(month, raw) {
 }
 
 /**
- * "일별매출" 시트의 AH/AJ열(쇼피 - 싱가포르/베트남 판매수량)을 더해 쇼피
- * 월별 구매 건수를 날짜 기준으로 합산합니다. 이 시트에는 채널별 "주문건수"
- * 열이 따로 없는 채널이 대부분이라(네이버/29CM/큐텐만 있음), 쇼피는
- * 판매수량을 구매 건수로 씁니다. "월별 구매 건수" 차트용.
+ * "일별매출" 시트의 싱가포르/베트남 판매수량 열을 더해 쇼피 월별 구매
+ * 건수를 날짜 기준으로 합산합니다. 이 시트에는 채널별 "주문건수" 열이
+ * 따로 없는 채널이 대부분이라(네이버/29CM/큐텐만 있음), 쇼피는 판매수량을
+ * 구매 건수로 씁니다. "월별 구매 건수" 차트용.
  */
 function getKrShopeeOrdersByMonth_(raw) {
   const totals = new Array(12).fill(0);
@@ -1801,6 +1832,7 @@ function getKrShopeeOrdersByMonth_(raw) {
   const values = data.values;
   const headerRow = data.headerRow;
   if (headerRow < 0) return totals;
+  const cols = getKrShopeeColumns_(data);
 
   for (let r = headerRow + 1; r < values.length; r++) {
     const date = String(values[r][0] || "");
@@ -1808,7 +1840,7 @@ function getKrShopeeOrdersByMonth_(raw) {
     if (!match) continue;
     const m = Number(match[1]);
     if (m < 1 || m > 12) continue;
-    totals[m - 1] += toNumber_(values[r][33]) + toNumber_(values[r][35]); // AH 싱가포르 + AJ 베트남 판매수량
+    cols.orderCols.forEach(c => { totals[m - 1] += toNumber_(values[r][c]); });
   }
 
   return totals;
