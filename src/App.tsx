@@ -752,7 +752,7 @@ function Global({ d, m }: { d: DashboardData | null; m: number }) {
         <KPI label="이번 달 글로벌 매출" value={money(sale)} note={`${m}월 기준`} />
         <KPI label="이번 달 목표" value={money(target)} />
         <KPI label="목표 달성률" value={`${rate.toFixed(1)}%`} />
-        <KPI label="YTD 누계 매출" value={money(ytdSales)} note={`1월~${m}월`} />
+        <KPI label="연간 누계 매출" value={money(ytdSales)} note={`1월~${m}월`} />
       </div>
       <div className="grid">
         <ChartCard
