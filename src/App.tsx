@@ -603,7 +603,7 @@ function Executive({
           </>
         )}
       </section>
-      <div className={`kpis${market === "JP" ? " grid-4" : ""}`}>
+      <div className="kpis grid-4">
         <KPI
           label="월 매출"
           value={money(sales, c)}
