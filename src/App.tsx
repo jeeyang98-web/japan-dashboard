@@ -254,11 +254,6 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     (v, i) => v + (monthlyJpKrw[i] || 0) + (globalMonthlySales[i] || 0),
   );
 
-  const krYtd = (t?.monthlyKr || []).slice(0, m).reduce((a, v) => a + v, 0);
-  const jpYtdKrw = monthlyJpKrw.slice(0, m).reduce((a, v) => a + v, 0);
-  const globalYtd = globalMonthlySales.slice(0, m).reduce((a, v) => a + (v || 0), 0);
-  const totalYtd = krYtd + jpYtdKrw + globalYtd;
-
   const marketTargets: Record<Market, number[]> = {
     ALL: combinedTargets,
     KR: krTargets,
@@ -340,22 +335,20 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     <>
       <section className="intro">
         <h2>KR + JP Business Overview</h2>
-        <p>JP 매출을 월별 JPY→KRW 환율(월말 기준)로 환산한 통합 실적입니다.</p>
+        <p>JP 매출을 월별 JPY→KRW 환율(월말 기준)로 환산하고 글로벌 플랫폼 매출을 더한 통합 실적입니다.</p>
         <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">KR 데이터</a>
         <span> · </span>
         <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">JP 데이터</a>
         <span> · </span>
         <a className="source-link" href="https://share.google/kB3LrSbGm3er9v5vB" target="_blank" rel="noreferrer">JPY/KRW 환율</a>
       </section>
-      <div className="kpis">
+      <div className="kpis grid-4">
         <KPI label="통합 월매출" value={money(total)} note={`${m}월 · KRW`} />
         <KPI label="통합 월목표" value={money(combinedTargets[m - 1] || 0)} note="KR + 환산 JP" />
         <KPI
-          label="통합 목표 달성률"
+          label="통합 월 목표 달성률"
           value={`${combinedTargets[m - 1] ? ((total / combinedTargets[m - 1]) * 100).toFixed(1) : "0.0"}%`}
         />
-        <KPI label="통합 YTD 매출" value={money(totalYtd)} note="1월부터 선택 월까지" />
-        <KPI label="KR 매출 비중" value={`${total ? ((kr / total) * 100).toFixed(1) : "0.0"}%`} />
         <KPI label="JPY/KRW 환율" value={rate.toFixed(4)} note={`${m}월 환율`} />
       </div>
       <div className="grid">
