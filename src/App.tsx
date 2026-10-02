@@ -342,14 +342,13 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         <span> · </span>
         <a className="source-link" href="https://share.google/kB3LrSbGm3er9v5vB" target="_blank" rel="noreferrer">JPY/KRW 환율</a>
       </section>
-      <div className="kpis grid-4">
+      <div className="kpis grid-3">
         <KPI label="통합 월매출" value={money(total)} note={`${m}월 · KRW`} />
         <KPI label="통합 월목표" value={money(combinedTargets[m - 1] || 0)} note="KR + 환산 JP" />
         <KPI
           label="통합 월 목표 달성률"
           value={`${combinedTargets[m - 1] ? ((total / combinedTargets[m - 1]) * 100).toFixed(1) : "0.0"}%`}
         />
-        <KPI label="JPY/KRW 환율" value={rate.toFixed(4)} note={`${m}월 환율`} />
       </div>
       <div className="grid">
         <ChartCard
