@@ -1081,21 +1081,21 @@ function getGlobalPlatformData(month) {
 }
 
 /**
- * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 매출, 국내 월 목표,
- * 그리고 엔화→원화 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다.
- * "월마감" 시트는 국내 채널 마감이 완료된 달까지만 값이 채워져 있어
- * (예: 진행 중인 달은 0), 그 달만 "일별매출" 시트의 실시간 누계로 보정합니다.
+ * KR 사업 스프레드시트("월마감" 시트)에서 국내 월 목표, 그리고 엔화→원화
+ * 환율(큐텐 매출의 엔화/원화 병기 값에서 역산)을 읽어옵니다. 국내 월
+ * 매출(monthlyKr) 자체는 "월마감"이 아니라 "일별매출" 시트의 일자별
+ * 로그를 날짜 기준으로 합산한 값을 모든 달에 그대로 씁니다 - "월마감"은
+ * 담당자가 수기로 집계해 일별 로그와 몇 원 단위로 어긋날 수 있고, 마감
+ * 전인 달은 아예 비어있어 매번 실시간 출처(일별매출)로 맞춰주는 게
+ * 일관적입니다.
  */
 function getKrMonthlyClose_() {
   const ss = getKrSpreadsheet_();
   const sheet = requireSheet_(ss, "월마감");
 
-  // "국내 합계"(Z열) 헤더는 4행에 있어서 실제 12개월 데이터가 5행부터 시작하는데,
-  // 같은 섹션의 큐텐/기타(JP) 열(AD/AE/AH)은 헤더("매출액(엔화)"/"매출액(KRW)")가
-  // 한 행 아래인 5행에 있어서 실제 데이터가 6행부터 시작함 - 담당자가 이 JP 관련
-  // 열들을 나중에 한 행 밀려서 추가한 것으로 보임 (Apps Script 편집기에서 헤더 행
-  // 위치를 직접 확인). 그래서 국내 합계와 JP 관련 열을 서로 다른 시작행으로 따로 읽는다.
-  const domesticSection = sheet.getRange(5, 26, 12, 1).getDisplayValues(); // Z5:Z16 (1월~12월)
+  // 큐텐/기타(JP) 열(AD/AE/AH)은 헤더("매출액(엔화)"/"매출액(KRW)")가 5행에
+  // 있어서 실제 데이터가 6행부터 시작함 (Apps Script 편집기에서 헤더 행
+  // 위치를 직접 확인).
   const jpSection = sheet.getRange(6, 30, 12, 5).getDisplayValues(); // AD6:AH17 (1월~12월)
   // "2. 국내 채널별 목표 대비 달성율" 섹션의 "국내 합계" 블록 · "목표 (100억)" 열(AM,
   // 39번째 열) · 월별 데이터는 24행부터(1월) 시작. 예전엔 AI열(35번째, 시코르 채널의
@@ -1104,35 +1104,27 @@ function getKrMonthlyClose_() {
   // (Apps Script 편집기에서 직접 읽어 확인).
   const targetColumn = sheet.getRange(24, 39, 12, 1).getDisplayValues();
 
-  const monthlyKr = [];
   const impliedRate = [];
   const krTargets = [];
   const monthlyJpQoo10Krw = []; // col31: 큐텐 매출액(KRW)
   const monthlyJpOtherKrw = []; // col34: 기타(JP) 매출액(KRW)
 
   for (let i = 0; i < 12; i++) {
-    const domestic = toNumber_((domesticSection[i] || [])[0]); // col26: 매출 합계_배송비 포함 (국내)
     const jpRow = jpSection[i] || [];
     const jpJpy = toNumber_(jpRow[0]); // col30: 큐텐 매출액(엔화)
     const jpKrw = toNumber_(jpRow[1]); // col31: 큐텐 매출액(KRW)
 
-    monthlyKr.push(domestic);
     impliedRate.push(jpJpy ? jpKrw / jpJpy : 0);
     krTargets.push(toNumber_((targetColumn[i] || [])[0]));
     monthlyJpQoo10Krw.push(jpKrw);
     monthlyJpOtherKrw.push(toNumber_(jpRow[4])); // col34
   }
 
-  // 마감 전이라 "월마감"에 아직 0으로 남아있는 달은 "일별매출" 시트의
-  // 일자별 로그를 날짜 기준으로 합산한 값으로 채웁니다. "오늘이 몇 월인지"
-  // 로 어느 달을 보정할지 정하지 않으므로 월 경계(예: 9/1에 8월분이 아직
-  // 마감 전인 경우)에서도 안전합니다.
+  // 국내 월 매출은 "일별매출" 시트의 일자별 로그를 날짜 기준으로 합산한
+  // 값을 모든 달에 씁니다 (위 함수 docstring 참고).
   // 매출/구매건수 둘 다 같은 "일별매출" 시트를 읽으므로 한 번만 읽어서 공유합니다.
   const dailySheetRaw = readKrDailySheetRaw_();
-  const dailyRevenue = getKrMonthlyRevenueFromDailyLog_(dailySheetRaw);
-  for (let i = 0; i < 12; i++) {
-    if (monthlyKr[i] === 0 && dailyRevenue[i]) monthlyKr[i] = dailyRevenue[i];
-  }
+  const monthlyKr = getKrMonthlyRevenueFromDailyLog_(dailySheetRaw);
 
   // "월마감" 시트에는 판매수량 자체가 없어서, "일별매출" 시트의 1월부터의
   // 일자별 로그를 월별로 합산해 12개월 전체를 채웁니다.
