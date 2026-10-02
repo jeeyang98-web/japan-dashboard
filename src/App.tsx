@@ -148,7 +148,7 @@ export default function App() {
   );
 }
 const titles: Record<Page, [string, string]> = {
-  total: ["Total Business Dashboard", "2SLASH4 total sales · Korea + Japan"],
+  total: ["Total Business Dashboard", "KR+JP+Global 통합 대시보드"],
   jp: [
     "JP Executive Dashboard",
     "Japan sales, orders, conversion & daily performance",
@@ -334,8 +334,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
   return (
     <>
       <section className="intro">
-        <h2>KR + JP Business Overview</h2>
-        <p>JP 매출을 월별 JPY→KRW 환율(월말 기준)로 환산하고 글로벌 플랫폼 매출을 더한 통합 실적입니다.</p>
+        <h2>Total Business Overview</h2>
+        <p>KR+JP+Global 통합 대시보드</p>
         <a className="source-link" href={krSheetUrl} target="_blank" rel="noreferrer">KR 데이터</a>
         <span> · </span>
         <a className="source-link" href={jpSheetUrl} target="_blank" rel="noreferrer">JP 데이터</a>
