@@ -254,6 +254,8 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
     (v, i) => v + (monthlyJpKrw[i] || 0) + (globalMonthlySales[i] || 0),
   );
 
+  const ytdSales = combinedMonthlySales.slice(0, m).reduce((a, v) => a + (v || 0), 0);
+
   const marketTargets: Record<Market, number[]> = {
     ALL: combinedTargets,
     KR: krTargets,
@@ -342,13 +344,14 @@ function Total({ d, m }: { d: DashboardData | null; m: number }) {
         <span> · </span>
         <a className="source-link" href="https://share.google/kB3LrSbGm3er9v5vB" target="_blank" rel="noreferrer">JPY/KRW 환율</a>
       </section>
-      <div className="kpis grid-3">
-        <KPI label="통합 월매출" value={money(total)} note={`${m}월 · KRW`} />
-        <KPI label="통합 월목표" value={money(combinedTargets[m - 1] || 0)} note="KR + 환산 JP" />
+      <div className="kpis grid-4">
+        <KPI label="월매출" value={money(total)} note={`${m}월 · KRW`} accent />
+        <KPI label="월 목표매출" value={money(combinedTargets[m - 1] || 0)} note="KR + 환산 JP" />
         <KPI
           label="통합 월 목표 달성률"
           value={`${combinedTargets[m - 1] ? ((total / combinedTargets[m - 1]) * 100).toFixed(1) : "0.0"}%`}
         />
+        <KPI label="연간 누계 매출" value={money(ytdSales)} note={`1월~${m}월`} />
       </div>
       <div className="grid">
         <ChartCard
