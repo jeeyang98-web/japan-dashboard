@@ -1141,44 +1141,54 @@ function getKrMonthlyClose_() {
 }
 
 // "월마감" 시트 "2. 국내 채널별 목표 대비 달성율" 섹션(row24~35, 1월~12월)의
-// 채널별 목표/매출액 열 위치(1-indexed). "기타 채널"은 매출액만 있고 목표가
-// 없어 targetCol을 0으로 둠. "국내 합계"는 이 섹션 자체의 합계 열(AM/AN,
-// getKrMonthlyClose_의 krTargets와 같은 목표 열)을 그대로 써서 표의 합계
-// 행으로 쓴다.
+// 채널별 목표 열 위치(1-indexed) - 목표는 이 섹션에만 있어서 여기서 읽는다.
+// revenueKey는 getKrChannelRevenueByMonth_()(= "채널별 월별 매출 추이"
+// 차트가 쓰는 것과 같은 객체)의 키로, 실매출은 거기서 가져와 맞춘다 - 이
+// 섹션 자체의 매출액 열은 SELL-IN 집계라 그 차트(SELL-OUT/일별매출 기준)와
+// 숫자가 달라서 쓰지 않는다. "기타 채널"은 목표가 없어 targetCol을 0으로 둠.
 var KR_CHANNEL_TARGET_COLS_ = [
-  { name: "자사몰(cafe24)", targetCol: 2, salesCol: 3 },
-  { name: "네이버 스마트스토어", targetCol: 6, salesCol: 7 },
-  { name: "29CM", targetCol: 10, salesCol: 11 },
-  { name: "카카오 선물하기", targetCol: 14, salesCol: 15 },
-  { name: "글아몰(SELL-IN)", targetCol: 18, salesCol: 19 },
-  { name: "아모레 (오프)", targetCol: 22, salesCol: 23 },
-  { name: "올리브영(SELL-IN)", targetCol: 26, salesCol: 27 },
-  { name: "CJ ENM", targetCol: 30, salesCol: 31 },
-  { name: "시코르", targetCol: 34, salesCol: 35 },
-  { name: "기타 채널", targetCol: 0, salesCol: 38 },
-  { name: "국내 합계", targetCol: 39, salesCol: 40 }
+  { name: "자사몰(cafe24)", targetCol: 2, revenueKey: "자사몰(cafe24)" },
+  { name: "네이버 스마트스토어", targetCol: 6, revenueKey: "네이버 스마트스토어" },
+  { name: "29CM", targetCol: 10, revenueKey: "29CM" },
+  { name: "카카오 선물하기", targetCol: 14, revenueKey: "카카오 선물하기" },
+  { name: "글아몰", targetCol: 18, revenueKey: "글아몰" },
+  { name: "아모레 (성수/부산/용산)", targetCol: 22, revenueKey: "아모레 (성수/부산/용산)" },
+  { name: "올리브영(SELL-OUT)", targetCol: 26, revenueKey: "올리브영\n(SELL-OUT)" },
+  { name: "CJ ENM", targetCol: 30, revenueKey: "CJ ENM" },
+  { name: "시코르", targetCol: 34, revenueKey: "시코르" },
+  { name: "기타", targetCol: 0, revenueKey: "기타" }
 ];
 
 /**
- * "월마감" 시트의 "2. 국내 채널별 목표 대비 달성율" 섹션에서 채널별 월별
- * 목표/매출액을 그대로 읽어옵니다. KR Executive의 "플랫폼별 목표매출 ·
- * 실매출" 상세 표용 - GLOBAL Executive의 getGlobalPlatformData와 같은
- * {platforms, targets, sales} 모양으로 반환해 같은 표 컴포넌트를 재사용할
- * 수 있게 합니다. "국내 합계"를 합계 행으로 포함합니다.
+ * KR Executive의 "플랫폼별 목표매출 · 실매출" 상세 표용. 목표는 "월마감"의
+ * "2. 국내 채널별 목표 대비 달성율" 섹션(목표가 있는 유일한 곳)에서 읽고,
+ * 실매출은 getKoreaFunnelData()가 "채널별 월별 매출 추이" 차트에 쓰는 것과
+ * 같은 channelRevenue 객체에서 그대로 가져와(호출부에서 전달) 그 차트와
+ * 숫자가 어긋나지 않게 합니다. "국내 합계"는 위 채널들의 목표/실매출 합.
+ * GLOBAL Executive의 getGlobalPlatformData와 같은 {platforms, targets,
+ * sales} 모양으로 반환해 같은 표 컴포넌트를 재사용합니다.
  */
-function getKrChannelTargetsByMonth_() {
+function getKrChannelTargetsByMonth_(channelRevenue) {
   const ss = getKrSpreadsheet_();
   const sheet = requireSheet_(ss, "월마감");
   const raw = sheet.getRange(24, 1, 12, 41).getDisplayValues(); // 1월~12월, A~AO
 
-  const platforms = KR_CHANNEL_TARGET_COLS_.map(c => c.name);
+  const platforms = KR_CHANNEL_TARGET_COLS_.map(c => c.name).concat(["국내 합계"]);
   const targets = {};
   const sales = {};
+  const totalTargets = new Array(12).fill(0);
+  const totalSales = new Array(12).fill(0);
 
   KR_CHANNEL_TARGET_COLS_.forEach(c => {
-    targets[c.name] = raw.map(row => c.targetCol ? toNumber_(row[c.targetCol - 1]) : 0);
-    sales[c.name] = raw.map(row => toNumber_(row[c.salesCol - 1]));
+    const t = raw.map(row => c.targetCol ? toNumber_(row[c.targetCol - 1]) : 0);
+    const s = (channelRevenue && channelRevenue[c.revenueKey]) || new Array(12).fill(0);
+    targets[c.name] = t;
+    sales[c.name] = s;
+    t.forEach((v, i) => { totalTargets[i] += v; });
+    s.forEach((v, i) => { totalSales[i] += v; });
   });
+  targets["국내 합계"] = totalTargets;
+  sales["국내 합계"] = totalSales;
 
   return { platforms: platforms, targets: targets, sales: sales };
 }
@@ -1731,9 +1741,10 @@ function getKoreaFunnelData(month) {
   delete channelRevenue["베트남"];
   channelRevenue["쇼피"] = getKrShopeeMonthlyKrw_(dailyRaw);
 
-  // KR Executive의 "플랫폼별 목표매출 · 실매출" 상세 표용 - "월마감"의
-  // 채널별 목표 대비 달성율 섹션(목표가 있는 유일한 곳)을 그대로 씁니다.
-  const channelTargets = getKrChannelTargetsByMonth_();
+  // KR Executive의 "플랫폼별 목표매출 · 실매출" 상세 표용 - 목표는 "월마감"
+  // 채널별 목표 대비 달성율 섹션에서, 실매출은 위 channelRevenue(=이
+  // 페이지의 "채널별 월별 매출 추이" 차트와 같은 값)에서 가져옵니다.
+  const channelTargets = getKrChannelTargetsByMonth_(channelRevenue);
 
   return {
     month: month,
