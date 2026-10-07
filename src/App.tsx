@@ -773,6 +773,23 @@ function Executive({
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="total-row">
+                  <td>합계</td>
+                  {x.channelTargets!.platforms.flatMap((name) => {
+                    const tSum = (x.channelTargets!.targets[name] || []).reduce((a, v) => a + (v || 0), 0);
+                    const sSum = (x.channelTargets!.sales[name] || []).reduce((a, v) => a + (v || 0), 0);
+                    const rSum = tSum ? (sSum / tSum) * 100 : 0;
+                    return [
+                      <td key={`${name}-target-total`}>{money(tSum)}</td>,
+                      <td key={`${name}-sales-total`}>{money(sSum)}</td>,
+                      <td key={`${name}-rate-total`} className={rSum >= 90 ? "rate-good" : "rate-bad"}>
+                        {rSum.toFixed(1)}%
+                      </td>,
+                    ];
+                  })}
+                </tr>
+              </tfoot>
             </table>
           </div>
         </section>
