@@ -730,7 +730,7 @@ function Executive({
         <section className="card wide detail-table">
           <h3>플랫폼별 목표매출 · 실매출 상세</h3>
           <p className="detail-caption">
-            월마감 시트의 "국내 채널별 목표 대비 달성율" 섹션 값입니다. 진행 중이라 아직 마감 전인 달은 매출액이 0으로 보일 수 있습니다.
+            목표는 월마감 시트의 "국내 채널별 목표 대비 달성율" 섹션, 실매출은 위 "채널별 월별 매출 추이" 차트와 같은 값(일별매출 시트 기준)입니다.
           </p>
           <div className="table-wrap">
             <table>
