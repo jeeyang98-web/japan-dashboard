@@ -39,6 +39,7 @@ export type DashboardData = {
     funnel?: Record<string, number>[];
     dailyProductQty?: DailyLineQty;
     channelRevenue?: Record<string, number[]>;
+    channelTargets?: { platforms: string[]; targets: Record<string, number[]>; sales: Record<string, number[]> };
   };
   global?: {
     platforms: string[];

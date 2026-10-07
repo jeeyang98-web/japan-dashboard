@@ -510,6 +510,7 @@ function mixHex(a: string, b: string, t: number) {
   const bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * clamp);
   return `rgb(${r},${g},${bl})`;
 }
+const KR_CHANNEL_GROUP_CLASSES = ["group-kr", "group-jp", "group-total"];
 function Executive({
   market,
   d,
@@ -722,6 +723,57 @@ function Executive({
               <span>전체 주문전환율</span>
               <strong>{String(funnel["주문전환율"] ?? "—")}</strong>
             </div>
+          </div>
+        </section>
+      )}
+      {market === "KR" && x?.channelTargets && (
+        <section className="card wide detail-table">
+          <h3>플랫폼별 목표매출 · 실매출 상세</h3>
+          <p className="detail-caption">
+            월마감 시트의 "국내 채널별 목표 대비 달성율" 섹션 값입니다. 진행 중이라 아직 마감 전인 달은 매출액이 0으로 보일 수 있습니다.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th rowSpan={2}>월</th>
+                  {x.channelTargets.platforms.map((name, i) => (
+                    <th key={name} colSpan={3} className={KR_CHANNEL_GROUP_CLASSES[i % KR_CHANNEL_GROUP_CLASSES.length]}>
+                      {name}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  {x.channelTargets.platforms.flatMap((name, i) => {
+                    const cls = KR_CHANNEL_GROUP_CLASSES[i % KR_CHANNEL_GROUP_CLASSES.length];
+                    return [
+                      <th key={`${name}-target`} className={cls}>목표</th>,
+                      <th key={`${name}-sales`} className={cls}>실매출</th>,
+                      <th key={`${name}-rate`} className={cls}>달성률</th>,
+                    ];
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((label, i) => (
+                  <tr key={label}>
+                    <td>{label}</td>
+                    {x.channelTargets!.platforms.flatMap((name) => {
+                      const t = x.channelTargets!.targets[name]?.[i] || 0;
+                      const s = x.channelTargets!.sales[name]?.[i] || 0;
+                      const r = t ? (s / t) * 100 : 0;
+                      return [
+                        <td key={`${name}-target`}>{money(t)}</td>,
+                        <td key={`${name}-sales`}>{money(s)}</td>,
+                        <td key={`${name}-rate`} className={r >= 90 ? "rate-good" : "rate-bad"}>
+                          {r.toFixed(1)}%
+                        </td>,
+                      ];
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
