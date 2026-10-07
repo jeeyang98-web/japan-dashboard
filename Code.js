@@ -1140,6 +1140,49 @@ function getKrMonthlyClose_() {
   };
 }
 
+// "월마감" 시트 "2. 국내 채널별 목표 대비 달성율" 섹션(row24~35, 1월~12월)의
+// 채널별 목표/매출액 열 위치(1-indexed). "기타 채널"은 매출액만 있고 목표가
+// 없어 targetCol을 0으로 둠. "국내 합계"는 이 섹션 자체의 합계 열(AM/AN,
+// getKrMonthlyClose_의 krTargets와 같은 목표 열)을 그대로 써서 표의 합계
+// 행으로 쓴다.
+var KR_CHANNEL_TARGET_COLS_ = [
+  { name: "자사몰(cafe24)", targetCol: 2, salesCol: 3 },
+  { name: "네이버 스마트스토어", targetCol: 6, salesCol: 7 },
+  { name: "29CM", targetCol: 10, salesCol: 11 },
+  { name: "카카오 선물하기", targetCol: 14, salesCol: 15 },
+  { name: "글아몰(SELL-IN)", targetCol: 18, salesCol: 19 },
+  { name: "아모레 (오프)", targetCol: 22, salesCol: 23 },
+  { name: "올리브영(SELL-IN)", targetCol: 26, salesCol: 27 },
+  { name: "CJ ENM", targetCol: 30, salesCol: 31 },
+  { name: "시코르", targetCol: 34, salesCol: 35 },
+  { name: "기타 채널", targetCol: 0, salesCol: 38 },
+  { name: "국내 합계", targetCol: 39, salesCol: 40 }
+];
+
+/**
+ * "월마감" 시트의 "2. 국내 채널별 목표 대비 달성율" 섹션에서 채널별 월별
+ * 목표/매출액을 그대로 읽어옵니다. KR Executive의 "플랫폼별 목표매출 ·
+ * 실매출" 상세 표용 - GLOBAL Executive의 getGlobalPlatformData와 같은
+ * {platforms, targets, sales} 모양으로 반환해 같은 표 컴포넌트를 재사용할
+ * 수 있게 합니다. "국내 합계"를 합계 행으로 포함합니다.
+ */
+function getKrChannelTargetsByMonth_() {
+  const ss = getKrSpreadsheet_();
+  const sheet = requireSheet_(ss, "월마감");
+  const raw = sheet.getRange(24, 1, 12, 41).getDisplayValues(); // 1월~12월, A~AO
+
+  const platforms = KR_CHANNEL_TARGET_COLS_.map(c => c.name);
+  const targets = {};
+  const sales = {};
+
+  KR_CHANNEL_TARGET_COLS_.forEach(c => {
+    targets[c.name] = raw.map(row => c.targetCol ? toNumber_(row[c.targetCol - 1]) : 0);
+    sales[c.name] = raw.map(row => toNumber_(row[c.salesCol - 1]));
+  });
+
+  return { platforms: platforms, targets: targets, sales: sales };
+}
+
 /**
  * "월마감" 시트에서 역산한 월별 실제 환율(krClose.impliedRate, AD/AE 병기
  * 값에서 나온 그 달의 실거래 환율)에, 아직 마감 전이라 실제 환율이 없는
@@ -1688,13 +1731,18 @@ function getKoreaFunnelData(month) {
   delete channelRevenue["베트남"];
   channelRevenue["쇼피"] = getKrShopeeMonthlyKrw_(dailyRaw);
 
+  // KR Executive의 "플랫폼별 목표매출 · 실매출" 상세 표용 - "월마감"의
+  // 채널별 목표 대비 달성율 섹션(목표가 있는 유일한 곳)을 그대로 씁니다.
+  const channelTargets = getKrChannelTargetsByMonth_();
+
   return {
     month: month,
     monthLabel: month + "월",
     orders: ordersByMonth,
     funnel: funnel,
     dailyByMonth: getKrDailySalesByMonth_(dailyRaw),
-    channelRevenue: channelRevenue
+    channelRevenue: channelRevenue,
+    channelTargets: channelTargets
   };
 }
 
