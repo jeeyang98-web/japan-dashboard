@@ -612,6 +612,7 @@ function Executive({
           label="월 매출"
           value={money(sales, c)}
           note={market === "KR" && m === 8 ? `8월 누계 · ${krSheetData.latestDailyDate} 기준` : `${m}월 기준`}
+          accent
         />
         <KPI label="월 목표" value={money(target, c)} />
         <KPI
@@ -821,7 +822,7 @@ function Global({ d, m }: { d: DashboardData | null; m: number }) {
         </a>
       </section>
       <div className="kpis grid-4">
-        <KPI label="이번 달 글로벌 매출" value={money(sale)} note={`${m}월 기준`} />
+        <KPI label="이번 달 글로벌 매출" value={money(sale)} note={`${m}월 기준`} accent />
         <KPI label="이번 달 목표" value={money(target)} />
         <KPI label="목표 달성률" value={`${rate.toFixed(1)}%`} />
         <KPI label="연간 누계 매출" value={money(ytdSales)} note={`1월~${m}월`} />
