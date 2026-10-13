@@ -795,6 +795,58 @@ function Executive({
           </div>
         </section>
       )}
+      {market === "JP" && x?.targets && (
+        <section className="card wide detail-table">
+          <h3>월별 목표매출 · 실매출 상세</h3>
+          <p className="detail-caption">
+            "매출 대시보드" 시트의 월별 목표(D5)와 실매출 값입니다.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>월</th>
+                  <th>목표</th>
+                  <th>실매출</th>
+                  <th>달성률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((label, i) => {
+                  const t = x.targets?.[i] || 0,
+                    s = x.monthlySales?.[i] || 0,
+                    r = t ? (s / t) * 100 : 0;
+                  return (
+                    <tr key={label}>
+                      <td>{label}</td>
+                      <td>{money(t, "JPY")}</td>
+                      <td>{money(s, "JPY")}</td>
+                      <td className={r >= 90 ? "rate-good" : "rate-bad"}>{r.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="total-row">
+                  <td>합계</td>
+                  {(() => {
+                    const tSum = (x.targets || []).reduce((a, v) => a + (v || 0), 0);
+                    const sSum = (x.monthlySales || []).reduce((a, v) => a + (v || 0), 0);
+                    const rSum = tSum ? (sSum / tSum) * 100 : 0;
+                    return (
+                      <>
+                        <td>{money(tSum, "JPY")}</td>
+                        <td>{money(sSum, "JPY")}</td>
+                        <td className={rSum >= 90 ? "rate-good" : "rate-bad"}>{rSum.toFixed(1)}%</td>
+                      </>
+                    );
+                  })()}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+      )}
     </>
   );
 }
@@ -888,6 +940,7 @@ function Global({ d, m }: { d: DashboardData | null; m: number }) {
                     {name}
                   </th>
                 ))}
+                <th colSpan={3} className="group-total">합계</th>
               </tr>
               <tr>
                 {platforms.flatMap((name, i) => {
@@ -898,27 +951,69 @@ function Global({ d, m }: { d: DashboardData | null; m: number }) {
                     <th key={`${name}-rate`} className={cls}>달성률</th>,
                   ];
                 })}
+                <th className="group-total">목표</th>
+                <th className="group-total">실매출</th>
+                <th className="group-total">달성률</th>
               </tr>
             </thead>
             <tbody>
-              {months.map((label, i) => (
-                <tr key={label}>
-                  <td>{label}</td>
-                  {platforms.flatMap((name) => {
-                    const t = targets[name]?.[i] || 0;
-                    const s = sales[name]?.[i] || 0;
-                    const r = t ? (s / t) * 100 : 0;
-                    return [
-                      <td key={`${name}-target`}>{money(t)}</td>,
-                      <td key={`${name}-sales`}>{money(s)}</td>,
-                      <td key={`${name}-rate`} className={r >= 90 ? "rate-good" : "rate-bad"}>
-                        {r.toFixed(1)}%
-                      </td>,
-                    ];
-                  })}
-                </tr>
-              ))}
+              {months.map((label, i) => {
+                const rowTotalTarget = monthlyTotalTargets[i] || 0,
+                  rowTotalSales = monthlyTotalSales[i] || 0,
+                  rowTotalRate = rowTotalTarget ? (rowTotalSales / rowTotalTarget) * 100 : 0;
+                return (
+                  <tr key={label}>
+                    <td>{label}</td>
+                    {platforms.flatMap((name) => {
+                      const t = targets[name]?.[i] || 0;
+                      const s = sales[name]?.[i] || 0;
+                      const r = t ? (s / t) * 100 : 0;
+                      return [
+                        <td key={`${name}-target`}>{money(t)}</td>,
+                        <td key={`${name}-sales`}>{money(s)}</td>,
+                        <td key={`${name}-rate`} className={r >= 90 ? "rate-good" : "rate-bad"}>
+                          {r.toFixed(1)}%
+                        </td>,
+                      ];
+                    })}
+                    <td>{money(rowTotalTarget)}</td>
+                    <td>{money(rowTotalSales)}</td>
+                    <td className={rowTotalRate >= 90 ? "rate-good" : "rate-bad"}>
+                      {rowTotalRate.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
+            <tfoot>
+              <tr className="total-row">
+                <td>합계</td>
+                {platforms.flatMap((name) => {
+                  const tSum = (targets[name] || []).reduce((a, v) => a + (v || 0), 0);
+                  const sSum = (sales[name] || []).reduce((a, v) => a + (v || 0), 0);
+                  const rSum = tSum ? (sSum / tSum) * 100 : 0;
+                  return [
+                    <td key={`${name}-target-total`}>{money(tSum)}</td>,
+                    <td key={`${name}-sales-total`}>{money(sSum)}</td>,
+                    <td key={`${name}-rate-total`} className={rSum >= 90 ? "rate-good" : "rate-bad"}>
+                      {rSum.toFixed(1)}%
+                    </td>,
+                  ];
+                })}
+                {(() => {
+                  const tSum = monthlyTotalTargets.reduce((a, v) => a + (v || 0), 0);
+                  const sSum = monthlyTotalSales.reduce((a, v) => a + (v || 0), 0);
+                  const rSum = tSum ? (sSum / tSum) * 100 : 0;
+                  return (
+                    <>
+                      <td>{money(tSum)}</td>
+                      <td>{money(sSum)}</td>
+                      <td className={rSum >= 90 ? "rate-good" : "rate-bad"}>{rSum.toFixed(1)}%</td>
+                    </>
+                  );
+                })()}
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
